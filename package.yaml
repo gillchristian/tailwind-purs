@@ -1,0 +1,45 @@
+name:                tailwind-purs
+version:             0.0.1.0
+github:              "gillchristian/tailwind-purs"
+license:             MIT
+author:              "Christian Gill"
+maintainer:          "gillchristiang@gmail.com"
+copyright:           "2020 Christian Gill"
+
+extra-source-files:
+- readme.md
+
+description:         Please see the README on GitHub at <https://github.com/gillchristian/tailwind-purs#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- directory
+- filepath
+- parsec
+- text
+
+library:
+  source-dirs: src
+
+executables:
+  tailwind-purs-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - tailwind-purs
+
+tests:
+  tailwind-purs-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - tailwind-purs
