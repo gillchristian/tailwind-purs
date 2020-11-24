@@ -3,11 +3,12 @@ module Lib
   )
 where
 
-import Control.Monad (join)
+import Control.Monad (join, void)
 import Data.Bifunctor (bimap)
 import qualified Data.Either as Either
-import qualified Data.List as List
 import qualified Data.Maybe as Maybe
+import Data.Tree (Tree (..))
+import qualified Data.Tree as Tree
 import qualified System.Directory as Dir
 import qualified System.Environment as Env
 import System.FilePath ((</>))
@@ -26,48 +27,40 @@ newtype Extension = Extension String
   deriving (Show, Eq, Ord)
 
 data Directory
-  = Directory FileName FullPath [Directory] [File]
+  = Directory FileName FullPath [File]
   deriving (Show, Eq, Ord)
 
 data File
   = File FileName FullPath Extension
   deriving (Show, Eq, Ord)
 
-traverseDirectory :: FilePath -> FilePath -> IO Directory
+traverseDirectory :: FilePath -> FilePath -> IO (Tree Directory)
 traverseDirectory path name = do
   contents <- filter (not . isIgnoredPath) <$> Dir.getDirectoryContents path
   (files, dirs) <-
     normaliseItems . Maybe.catMaybes <$> traverse (toItem path) contents
-  pure $ Directory (FileName name) (FullPath path) dirs files
+  pure $ Node (Directory (FileName name) (FullPath path) files) dirs
 
-normaliseFiles :: [File] -> [File]
-normaliseFiles = List.sort . filter isPursFile
+normaliseItems :: [Either File (Tree Directory)] -> ([File], [Tree Directory])
+normaliseItems = bimap (filter isPursFile) (filter $ not . isEmpty) . Either.partitionEithers
 
-normaliseDirs :: [Directory] -> [Directory]
-normaliseDirs = List.sort . filter (not . isEmpty)
-
-normaliseItems :: [Either File Directory] -> ([File], [Directory])
-normaliseItems = bimap normaliseFiles normaliseDirs . Either.partitionEithers
-
-toItem :: FilePath -> FilePath -> IO (Maybe (Either File Directory))
+toItem :: FilePath -> FilePath -> IO (Maybe (Either File (Tree Directory)))
 toItem rootPath name = do
   let path = Path.normalise $ rootPath </> name
   exists <- Dir.doesPathExist path
   isSym <- Dir.pathIsSymbolicLink path
   isDir <- Dir.doesDirectoryExist path
-  if not exists || isSym
-    then pure Nothing
-    else
-      if isDir
-        then Just . Right <$> traverseDirectory path name
-        else pure $ Just $ Left $ File (FileName name) (FullPath path) (takeExtension name)
+  case (not exists || isSym, isDir) of
+    (True, _) -> pure Nothing
+    (_, True) -> Just . Right <$> traverseDirectory path name
+    (_, False) -> pure $ Just $ Left $ File (FileName name) (FullPath path) (takeExtension name)
 
 isPursFile :: File -> Bool
 isPursFile (File _ _ (Extension "purs")) = True
 isPursFile _ = False
 
-isEmpty :: Directory -> Bool
-isEmpty (Directory _ _ [] []) = True
+isEmpty :: Tree Directory -> Bool
+isEmpty (Node (Directory _ _ []) []) = True
 isEmpty _ = False
 
 -- TODO: use .gitignore
@@ -85,11 +78,11 @@ takeExtension path =
     ('.' : extension) -> Extension extension
     extension -> Extension extension
 
-listFiles :: Directory -> [File]
-listFiles (Directory _ _ dirs files) = join (map listFiles dirs) ++ files
-
 filePath :: File -> FilePath
 filePath (File _ (FullPath path) _) = path
+
+dirFiles :: Directory -> [File]
+dirFiles (Directory _ _ files) = files
 
 getRoot :: FilePath -> IO (FilePath, String)
 getRoot path =
@@ -102,7 +95,7 @@ runFoo path = do
   Dir.setCurrentDirectory path
   (rootPath, rootName) <- getRoot path
   dir <- traverseDirectory rootPath rootName
-  mapM_ (putStrLn . filePath) $ listFiles dir
+  mapM_ (putStrLn . filePath) $ join $ Tree.flatten $ fmap dirFiles dir
 
 headOr :: a -> [a] -> a
 headOr a [] = a
