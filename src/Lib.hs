@@ -2,13 +2,14 @@
 
 module Lib
   ( run,
-    pruneUnusedClasses,
+    generatePursClasses,
     normaliseConfig,
     mkDefaultConfig,
-    Config (..),
+    PursClassesOptions (..),
   )
 where
 
+import Control.Applicative (Applicative (liftA2))
 import Control.Monad (join)
 import qualified Data.Bifunctor as BiF
 import qualified Data.Either as Either
@@ -181,87 +182,144 @@ filterUsedClasses usedClasses =
 
 -- -----------------------------------------------------------------------------
 
-data Config = Config
-  { optRoot :: FilePath,
-    optClasses :: FilePath,
-    optSrc :: FilePath,
-    optOut :: FilePath
+data PursClassesOptions = PursClassesOptions
+  { pursRoot :: FilePath,
+    pursAll :: FilePath,
+    pursSrc :: FilePath,
+    pursOut :: FilePath
   }
   deriving (Eq, Show)
 
-configP :: Opt.Parser Config
-configP =
-  Config
-    <$> Opt.strArgument
-      ( Opt.metavar "ROOT"
-          <> Opt.value "."
-          <> Opt.help "Root directory of the project"
-          <> Opt.showDefault
-      )
-    <*> Opt.strOption
-      ( Opt.long "classes"
-          <> Opt.metavar "CLASSES"
-          <> Opt.value "css.txt"
-          <> Opt.help "The file with the available classes"
-          <> Opt.showDefault
-      )
-    <*> Opt.strOption
-      ( Opt.long "src"
-          <> Opt.metavar "SRC"
-          <> Opt.value "src"
-          <> Opt.help "The source directory"
-          <> Opt.showDefault
-      )
-    <*> Opt.strOption
-      ( Opt.long "out"
-          <> Opt.short 'o'
-          <> Opt.metavar "OUT"
-          <> Opt.value "src/Tailwind.purs"
-          <> Opt.help "The output file"
-          <> Opt.showDefault
-      )
+pursOpts :: Opt.ParserInfo Command
+pursOpts =
+  PursClasses <$> Opt.info opts (Opt.progDesc desc)
+  where
+    desc = "Find all the used classes and generate the Tailwind.purs only with those"
+    opts =
+      PursClassesOptions
+        <$> Opt.strArgument
+          ( Opt.metavar "ROOT"
+              <> Opt.value "."
+              <> Opt.help "Root directory of the project"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "classes"
+              <> Opt.metavar "CLASSES"
+              <> Opt.value "css.txt"
+              <> Opt.help "The file with the available classes"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "src"
+              <> Opt.metavar "SRC"
+              <> Opt.value "src"
+              <> Opt.help "The source directory"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "out"
+              <> Opt.short 'o'
+              <> Opt.metavar "OUT"
+              <> Opt.value "src/Tailwind.purs"
+              <> Opt.help "The output file"
+              <> Opt.showDefault
+          )
 
-opts :: Opt.ParserInfo Config
+data CleanCssOptions = CleanCssOptions
+  { cleanRoot :: FilePath,
+    cleanClasses :: FilePath,
+    cleanCss :: FilePath
+  }
+  deriving (Eq, Show)
+
+cssOpts :: Opt.ParserInfo Command
+cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
+  where
+    desc = "Find all the used classes and clean up tailwind.css of the rest"
+    opts =
+      CleanCssOptions
+        <$> Opt.strArgument
+          ( Opt.metavar "ROOT"
+              <> Opt.value "."
+              <> Opt.help "Root directory of the project"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "classes"
+              <> Opt.metavar "CLASSES"
+              <> Opt.value "css.txt"
+              <> Opt.help "The file with the available classes"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "css"
+              <> Opt.metavar "SRC"
+              <> Opt.value "wip/tailwind.css"
+              <> Opt.help "The file with all the generated Tailwind CSS"
+              <> Opt.showDefault
+          )
+
+data Command
+  = PursClasses PursClassesOptions
+  | CleanCss CleanCssOptions
+  deriving (Eq, Show)
+
+newtype Options = Options {uncommand :: Command}
+  deriving (Eq, Show)
+
+opts :: Opt.ParserInfo Options
 opts =
   Opt.info
-    (configP <**> Opt.helper)
-    ( Opt.fullDesc
-        <> Opt.header "Do some Tailwind stuff"
-    )
+    (programm <**> Opt.helper)
+    (Opt.fullDesc <> Opt.header "Do some Tailwind stuff")
+  where
+    programm = Options <$> Opt.hsubparser (purs <> css)
+    purs = Opt.command "purs" pursOpts
+    css = Opt.command "css" cssOpts
 
-mkDefaultConfig :: FilePath -> Config
+mkDefaultConfig :: FilePath -> PursClassesOptions
 mkDefaultConfig root =
-  Config
-    { optRoot = root,
-      optClasses = root </> "css.txt",
-      optSrc = root </> "src",
-      optOut = root </> "src/Tailwind.purs"
+  PursClassesOptions
+    { pursRoot = root,
+      pursAll = root </> "css.txt",
+      pursSrc = root </> "src",
+      pursOut = root </> "src/Tailwind.purs"
     }
 
-normaliseConfig :: Config -> IO Config
-normaliseConfig (Config root classes src out) = do
+normaliseConfig :: PursClassesOptions -> IO PursClassesOptions
+normaliseConfig (PursClassesOptions root classes src out) = do
   root <- Dir.makeAbsolute root
   pure $
-    Config
-      { optRoot = root,
-        optClasses = root </> classes,
-        optSrc = root </> src,
-        optOut = root </> out
+    PursClassesOptions
+      { pursRoot = root,
+        pursAll = root </> classes,
+        pursSrc = root </> src,
+        pursOut = root </> out
       }
 
-pruneUnusedClasses :: Config -> IO ()
-pruneUnusedClasses config = do
-  files <- listFiles $ optSrc config
-  usedClasses <- fmap join . sequence <$> traverse extractClasses files
-  availableClasses <- BiF.first show <$> parseFromFile classes (optClasses config)
+extractUsedClasses :: [FilePath] -> IO (Either String [String])
+extractUsedClasses files = fmap join . sequence <$> traverse extractClasses files
+
+readAvailableClasses :: FilePath -> IO (Either String [CssClass])
+readAvailableClasses path = BiF.first show <$> parseFromFile classes path
+
+generatePursClasses :: PursClassesOptions -> IO ()
+generatePursClasses config = do
+  files <- listFiles $ pursSrc config
+  usedClasses <- extractUsedClasses files
+  availableClasses <- readAvailableClasses $ pursAll config
   let cs = filterUsedClasses <$> usedClasses <*> availableClasses
-  let result = (,) <$> (length <$> cs) <*> (tailwindPurs <$> cs)
-  case result of
+  case liftA2 (,) <$> fmap length <*> fmap tailwindPurs $ cs of
     Right (count, contents) -> do
-      TextIO.writeFile (optOut config) contents
+      TextIO.writeFile (pursOut config) contents
       putStrLn $ "Found " <> show count <> " used classes"
-      putStrLn $ optOut config <> " updated succesfully!"
+      putStrLn $ pursOut config <> " updated succesfully!"
     Left err -> putStrLn err
 
 run :: IO ()
-run = pruneUnusedClasses =<< normaliseConfig =<< Opt.execParser opts
+run = do
+  cmd <- uncommand <$> Opt.execParser opts
+  case cmd of
+    (PursClasses opts) -> generatePursClasses =<< normaliseConfig opts
+    (CleanCss _) -> putStrLn "Not implemented yet"
