@@ -16,6 +16,7 @@ dependencies:
 - containers
 - directory
 - filepath
+- optparse-applicative
 - parsec
 - text
 
@@ -23,7 +24,7 @@ library:
   source-dirs: src
 
 executables:
-  tailwind-purs-exe:
+  twpurs:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

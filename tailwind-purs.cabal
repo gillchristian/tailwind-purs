@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2855a57678c2d592082431d7653ffa7555f6651d46782fb5eaeb46cdf34ce698
+-- hash: 6fd72766a30ec5599f203964ea5870abcd9eec60564f57d23667c4036f813b30
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -36,11 +36,12 @@ library
     , containers
     , directory
     , filepath
+    , optparse-applicative
     , parsec
     , text
   default-language: Haskell2010
 
-executable tailwind-purs-exe
+executable twpurs
   main-is: Main.hs
   other-modules:
       Paths_tailwind_purs
@@ -52,6 +53,7 @@ executable tailwind-purs-exe
     , containers
     , directory
     , filepath
+    , optparse-applicative
     , parsec
     , tailwind-purs
     , text
@@ -70,6 +72,7 @@ test-suite tailwind-purs-test
     , containers
     , directory
     , filepath
+    , optparse-applicative
     , parsec
     , tailwind-purs
     , text
