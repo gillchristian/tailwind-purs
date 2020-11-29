@@ -287,8 +287,8 @@ cssFile = CssAST <$> P.many node <* P.spaces <* P.eof
 
 data PursClassesOptions = PursClassesOptions
   { pursRoot :: FilePath,
-    pursAll :: FilePath,
     pursSrc :: FilePath,
+    pursClasses :: FilePath,
     pursOut :: FilePath
   }
   deriving (Eq, Show)
@@ -297,20 +297,13 @@ pursOpts :: Opt.ParserInfo Command
 pursOpts =
   PursClasses <$> Opt.info opts (Opt.progDesc desc)
   where
-    desc = "Find all the used classes and generate the Tailwind.purs only with those"
+    desc = "Generate Tailwind.purs with only the used classes"
     opts =
       PursClassesOptions
         <$> Opt.strArgument
           ( Opt.metavar "ROOT"
               <> Opt.value "."
-              <> Opt.help "Root directory of the project"
-              <> Opt.showDefault
-          )
-        <*> Opt.strOption
-          ( Opt.long "classes"
-              <> Opt.metavar "CLASSES"
-              <> Opt.value "css.txt"
-              <> Opt.help "The file with the available classes"
+              <> Opt.help "Root directory of the project. The other paths are relative this path."
               <> Opt.showDefault
           )
         <*> Opt.strOption
@@ -321,11 +314,18 @@ pursOpts =
               <> Opt.showDefault
           )
         <*> Opt.strOption
+          ( Opt.long "classes"
+              <> Opt.metavar "CLASSES"
+              <> Opt.value "css.txt"
+              <> Opt.help "File containing the available classes"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
           ( Opt.long "out"
               <> Opt.short 'o'
               <> Opt.metavar "OUT"
               <> Opt.value "src/Tailwind.purs"
-              <> Opt.help "The output file"
+              <> Opt.help "Output file"
               <> Opt.showDefault
           )
 
@@ -341,7 +341,7 @@ data CleanCssOptions = CleanCssOptions
 cssOpts :: Opt.ParserInfo Command
 cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
   where
-    desc = "Find all the used classes and clean up tailwind.css of the rest"
+    desc = "Generate tailwind.css with only the used styles"
     opts =
       CleanCssOptions
         <$> Opt.strArgument
@@ -361,7 +361,7 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
           ( Opt.long "classes"
               <> Opt.metavar "CLASSES"
               <> Opt.value "css.txt"
-              <> Opt.help "The file with the available classes"
+              <> Opt.help "File containing the available classes"
               <> Opt.showDefault
           )
         <*> Opt.strOption
@@ -376,7 +376,7 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
               <> Opt.short 'o'
               <> Opt.metavar "OUT"
               <> Opt.value "dist/tailwind.css"
-              <> Opt.help "The output file"
+              <> Opt.help "Output file"
               <> Opt.showDefault
           )
 
@@ -404,18 +404,18 @@ mkDefaultPursClassesOptions :: FilePath -> PursClassesOptions
 mkDefaultPursClassesOptions root =
   PursClassesOptions
     { pursRoot = root,
-      pursAll = root </> "css.txt",
+      pursClasses = root </> "css.txt",
       pursSrc = root </> "src",
       pursOut = root </> "src/Tailwind.purs"
     }
 
 normalisePursClassesConfig :: PursClassesOptions -> IO PursClassesOptions
-normalisePursClassesConfig (PursClassesOptions root classes src out) = do
+normalisePursClassesConfig (PursClassesOptions root src classes out) = do
   root <- Dir.makeAbsolute root
   pure $
     PursClassesOptions
       { pursRoot = root,
-        pursAll = root </> classes,
+        pursClasses = root </> classes,
         pursSrc = root </> src,
         pursOut = root </> out
       }
@@ -454,7 +454,7 @@ parseInputCss path = BiF.first show <$> parseFromFile cssFile path
 generatePursClasses :: PursClassesOptions -> IO ()
 generatePursClasses config = do
   usedClasses <- extractUsedClasses =<< listFiles (pursSrc config)
-  availableClasses <- readAvailableClasses $ pursAll config
+  availableClasses <- readAvailableClasses $ pursClasses config
   let cs = filterUsedClasses <$> usedClasses <*> availableClasses
   case liftA2 (,) <$> fmap length <*> fmap tailwindPurs $ cs of
     Right (count, contents) -> do
@@ -497,6 +497,7 @@ generateOptimizedCSS config = do
   let outputCss = filterUnusedCss <$> (filterUsedClasses <$> usedClasses <*> availableClasses) <*> inputCss
   case outputCss of
     Right css -> do
+      -- TODO stats (eg. size before & after)
       writeFile (cleanOut config) $ show css
       putStrLn $ "Optimized CSS written to " <> cleanOut config
     Left err -> putStrLn err
