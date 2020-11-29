@@ -1,18 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lib
-  ( run,
+  ( cssFile,
     generatePursClasses,
-    normaliseConfig,
-    mkDefaultConfig,
+    mediaQuery,
+    mkDefaultCleanCssOptions,
+    mkDefaultPursClassesOptions,
+    normalisePursClassesConfig,
+    query,
+    ruleGroup,
+    run,
+    CssAST (..),
+    CssNode (..),
     PursClassesOptions (..),
+    Selector (..),
   )
 where
 
 import Control.Applicative (Applicative (liftA2))
-import Control.Monad (join)
+import Control.Monad (join, void)
 import qualified Data.Bifunctor as BiF
+import Data.Char (isSpace)
 import qualified Data.Either as Either
+import Data.List (dropWhileEnd, intercalate)
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Maybe as Maybe
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -110,8 +122,10 @@ listFiles path = do
 
 -- -----------------------------------------------------------------------------
 
-data CssClass
-  = CssClass String String
+data CssClass = CssClass
+  { classPursName :: String,
+    classCssName :: String
+  }
   deriving (Eq, Ord)
 
 instance Show CssClass where
@@ -182,6 +196,95 @@ filterUsedClasses usedClasses =
 
 -- -----------------------------------------------------------------------------
 
+data Selector
+  = GenericSelector String
+  | ClassSelector String (Maybe String)
+  deriving (Eq)
+
+instance Show Selector where
+  show (GenericSelector selector) = selector -- <> " /* GenericSelector */"
+  show (ClassSelector class' (Just mod)) = "." <> class' <> mod -- <> " /* ClassWithMod */"
+  show (ClassSelector class' Nothing) = "." <> class' -- <> " /* Class */"
+
+data CssNode
+  = RuleGroup (NonEmpty Selector) String
+  | MediaQuery String [CssNode]
+  | Query String String [CssNode]
+  | Comment String
+  deriving (Eq)
+
+instance Show CssNode where
+  show (RuleGroup selectors body) = selectors' <> " {" <> body <> "}"
+    where
+      selectors' = intercalate ",\n" $ NE.toList $ fmap show selectors
+  show (MediaQuery query nodes) = "@media " <> query <> " {\n" <> nodes' <> "\n}"
+    where
+      nodes' = intercalate "\n\n" $ map (("  " ++) . show) nodes
+  show (Query query name nodes) = "@" <> query <> " " <> name <> " {\n" <> nodes' <> "\n}"
+    where
+      nodes' = intercalate "\n\n" $ map (("  " ++) . show) nodes
+  show (Comment c) = "/*" <> c <> "*/"
+
+newtype CssAST = CssAST {unAst :: [CssNode]}
+  deriving (Eq)
+
+instance Show CssAST where
+  show (CssAST nodes) = intercalate "\n\n" (map show nodes) <> "\n"
+
+trimEnd :: String -> String
+trimEnd = dropWhileEnd isSpace
+
+selector :: Parser Selector
+selector = P.try class' <|> generic
+  where
+    generic = GenericSelector . trimEnd <$> P.many1 (P.noneOf ",{}") <* P.spaces
+    tillEscapedColon = (++ "\\:") <$> P.manyTill (P.noneOf ",{: ") (P.string "\\:")
+    class' = do
+      void $ P.char '.'
+      before <- P.try tillEscapedColon <|> P.many1 (P.noneOf ",{: ")
+      after <- P.many (P.noneOf ",{: ")
+      mod <- trimEnd <$> P.many (P.noneOf ",{")
+      pure $ ClassSelector (before <> after) $ NE.toList <$> NE.nonEmpty mod
+
+brackets :: Parser a -> Parser a
+brackets = P.between (P.char '{') (P.char '}')
+
+ruleGroup :: Parser CssNode
+ruleGroup = do
+  selectors <- P.sepBy1 selector (P.char ',' <* P.spaces)
+  body <- brackets $ P.many $ P.noneOf "}"
+  P.spaces
+  -- selectors is guaranteed to have at least one item becase of P.sepBy1
+  pure $ RuleGroup (NE.fromList selectors) body
+
+mediaQuery :: Parser CssNode
+mediaQuery = do
+  void $ P.string "@media" <* P.spaces
+  q <- P.many (P.noneOf "{")
+  ruleGroups <- brackets $ P.spaces *> P.many (P.try mediaQuery <|> ruleGroup)
+  P.spaces
+  pure $ MediaQuery (trimEnd q) ruleGroups
+
+query :: Parser CssNode
+query = do
+  q <- P.char '@' *> P.many (P.noneOf " ") <* P.spaces
+  name <- P.many P.alphaNum <* P.spaces
+  ruleGroups <- brackets $ P.spaces *> P.many ruleGroup
+  P.spaces
+  pure $ Query q name ruleGroups
+
+comment :: Parser CssNode
+comment = do
+  void $ P.string "/*"
+  Comment <$> P.manyTill P.anyChar (P.try $ P.string "*/") <* P.spaces
+
+cssFile :: Parser CssAST
+cssFile = CssAST <$> P.many node <* P.spaces <* P.eof
+  where
+    node = P.try comment <|> P.try mediaQuery <|> P.try query <|> ruleGroup
+
+-- -----------------------------------------------------------------------------
+
 data PursClassesOptions = PursClassesOptions
   { pursRoot :: FilePath,
     pursAll :: FilePath,
@@ -228,8 +331,10 @@ pursOpts =
 
 data CleanCssOptions = CleanCssOptions
   { cleanRoot :: FilePath,
+    cleanSrc :: FilePath,
     cleanClasses :: FilePath,
-    cleanCss :: FilePath
+    cleanInputCss :: FilePath,
+    cleanOut :: FilePath
   }
   deriving (Eq, Show)
 
@@ -246,6 +351,13 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
               <> Opt.showDefault
           )
         <*> Opt.strOption
+          ( Opt.long "src"
+              <> Opt.metavar "SRC"
+              <> Opt.value "src"
+              <> Opt.help "The PureScript source directory"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
           ( Opt.long "classes"
               <> Opt.metavar "CLASSES"
               <> Opt.value "css.txt"
@@ -254,9 +366,17 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
           )
         <*> Opt.strOption
           ( Opt.long "css"
-              <> Opt.metavar "SRC"
+              <> Opt.metavar "CSS"
               <> Opt.value "wip/tailwind.css"
               <> Opt.help "The file with all the generated Tailwind CSS"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "out"
+              <> Opt.short 'o'
+              <> Opt.metavar "OUT"
+              <> Opt.value "dist/tailwind.css"
+              <> Opt.help "The output file"
               <> Opt.showDefault
           )
 
@@ -278,8 +398,10 @@ opts =
     purs = Opt.command "purs" pursOpts
     css = Opt.command "css" cssOpts
 
-mkDefaultConfig :: FilePath -> PursClassesOptions
-mkDefaultConfig root =
+-- -----------------------------------------------------------------------------
+
+mkDefaultPursClassesOptions :: FilePath -> PursClassesOptions
+mkDefaultPursClassesOptions root =
   PursClassesOptions
     { pursRoot = root,
       pursAll = root </> "css.txt",
@@ -287,8 +409,8 @@ mkDefaultConfig root =
       pursOut = root </> "src/Tailwind.purs"
     }
 
-normaliseConfig :: PursClassesOptions -> IO PursClassesOptions
-normaliseConfig (PursClassesOptions root classes src out) = do
+normalisePursClassesConfig :: PursClassesOptions -> IO PursClassesOptions
+normalisePursClassesConfig (PursClassesOptions root classes src out) = do
   root <- Dir.makeAbsolute root
   pure $
     PursClassesOptions
@@ -298,16 +420,40 @@ normaliseConfig (PursClassesOptions root classes src out) = do
         pursOut = root </> out
       }
 
+mkDefaultCleanCssOptions :: FilePath -> CleanCssOptions
+mkDefaultCleanCssOptions root =
+  CleanCssOptions
+    { cleanRoot = root,
+      cleanSrc = root </> "src",
+      cleanClasses = root </> "css.txt",
+      cleanInputCss = root </> "wip/tailwind.css",
+      cleanOut = root </> "public/tailwind.css"
+    }
+
+normaliseCleanCssConfig :: CleanCssOptions -> IO CleanCssOptions
+normaliseCleanCssConfig (CleanCssOptions root src classes css out) = do
+  root <- Dir.makeAbsolute root
+  pure $
+    CleanCssOptions
+      { cleanRoot = root,
+        cleanSrc = root </> src,
+        cleanClasses = root </> classes,
+        cleanInputCss = root </> css,
+        cleanOut = root </> out
+      }
+
 extractUsedClasses :: [FilePath] -> IO (Either String [String])
 extractUsedClasses files = fmap join . sequence <$> traverse extractClasses files
 
 readAvailableClasses :: FilePath -> IO (Either String [CssClass])
 readAvailableClasses path = BiF.first show <$> parseFromFile classes path
 
+parseInputCss :: FilePath -> IO (Either String CssAST)
+parseInputCss path = BiF.first show <$> parseFromFile cssFile path
+
 generatePursClasses :: PursClassesOptions -> IO ()
 generatePursClasses config = do
-  files <- listFiles $ pursSrc config
-  usedClasses <- extractUsedClasses files
+  usedClasses <- extractUsedClasses =<< listFiles (pursSrc config)
   availableClasses <- readAvailableClasses $ pursAll config
   let cs = filterUsedClasses <$> usedClasses <*> availableClasses
   case liftA2 (,) <$> fmap length <*> fmap tailwindPurs $ cs of
@@ -317,9 +463,47 @@ generatePursClasses config = do
       putStrLn $ pursOut config <> " updated succesfully!"
     Left err -> putStrLn err
 
+filterUnusedCss :: [CssClass] -> CssAST -> CssAST
+filterUnusedCss used (CssAST nodes) = CssAST $ Maybe.mapMaybe mapFilterNode nodes
+  where
+    selectorMatchesClass :: Selector -> CssClass -> Bool
+    selectorMatchesClass (ClassSelector a' _) (CssClass _ a) = a == a'
+    selectorMatchesClass _ _ = False
+
+    isGenericSelector :: Selector -> Bool
+    isGenericSelector (GenericSelector _) = True
+    isGenericSelector _ = False
+
+    -- TODO: simplify filtering logig
+    mapFilterNode :: CssNode -> Maybe CssNode
+    mapFilterNode node@(RuleGroup selectors _) =
+      if any (\selector -> isGenericSelector selector || any (selectorMatchesClass selector) used) selectors
+        then Just node
+        else Nothing
+    mapFilterNode (Comment _) = Nothing
+    mapFilterNode node@Query {} = Just node
+    mapFilterNode (MediaQuery q children) =
+      if not . null $ filtered
+        then Just $ MediaQuery q filtered
+        else Nothing
+      where
+        filtered = unAst $ filterUnusedCss used $ CssAST children
+
+generateOptimizedCSS :: CleanCssOptions -> IO ()
+generateOptimizedCSS config = do
+  usedClasses <- extractUsedClasses =<< listFiles (cleanSrc config)
+  availableClasses <- readAvailableClasses $ cleanClasses config
+  inputCss <- parseInputCss $ cleanInputCss config
+  let outputCss = filterUnusedCss <$> (filterUsedClasses <$> usedClasses <*> availableClasses) <*> inputCss
+  case outputCss of
+    Right css -> do
+      writeFile (cleanOut config) $ show css
+      putStrLn $ "Optimized CSS written to " <> cleanOut config
+    Left err -> putStrLn err
+
 run :: IO ()
 run = do
   cmd <- uncommand <$> Opt.execParser opts
   case cmd of
-    (PursClasses opts) -> generatePursClasses =<< normaliseConfig opts
-    (CleanCss _) -> putStrLn "Not implemented yet"
+    (PursClasses opts) -> generatePursClasses =<< normalisePursClassesConfig opts
+    (CleanCss opts) -> generateOptimizedCSS =<< normaliseCleanCssConfig opts
