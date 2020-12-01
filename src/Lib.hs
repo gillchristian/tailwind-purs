@@ -2,12 +2,15 @@
 
 module Lib
   ( cssFile,
+    generateAvailableClasses,
     generatePursClasses,
     mediaQuery,
     mkDefaultCleanCssOptions,
+    mkDefaultGenAvailableClassesConfig,
     mkDefaultPursClassesOptions,
     normalisePursClassesConfig,
     query,
+    selector,
     ruleGroup,
     run,
     CssAST (..),
@@ -18,14 +21,16 @@ module Lib
 where
 
 import Control.Applicative (Applicative (liftA2))
-import Control.Monad (join, void)
+import Control.Monad (join, unless, void)
 import qualified Data.Bifunctor as BiF
 import Data.Char (isSpace)
 import qualified Data.Either as Either
-import Data.List (dropWhileEnd, intercalate)
+import Data.List (dropWhileEnd, intercalate, sort)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
+import qualified Data.List.Utils as List
 import qualified Data.Maybe as Maybe
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -36,6 +41,7 @@ import qualified Options.Applicative as Opt
 import qualified System.Directory as Dir
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
+import Text.Casing (camel)
 import Text.Parsec ((<|>))
 import qualified Text.Parsec as P
 import Text.Parsec.Text (Parser, parseFromFile)
@@ -241,7 +247,7 @@ selector = P.try class' <|> generic
     tillEscapedColon = (++ "\\:") <$> P.manyTill (P.noneOf ",{: ") (P.string "\\:")
     class' = do
       void $ P.char '.'
-      before <- P.try tillEscapedColon <|> P.many1 (P.noneOf ",{: ")
+      before <- P.try (join <$> P.many (P.try tillEscapedColon)) <|> P.many1 (P.noneOf ",{: ")
       after <- P.many (P.noneOf ",{: ")
       mod <- trimEnd <$> P.many (P.noneOf ",{")
       pure $ ClassSelector (before <> after) $ NE.toList <$> NE.nonEmpty mod
@@ -289,7 +295,8 @@ data PursClassesOptions = PursClassesOptions
   { pursRoot :: FilePath,
     pursSrc :: FilePath,
     pursClasses :: FilePath,
-    pursOut :: FilePath
+    pursOut :: FilePath,
+    pursAll :: Bool
   }
   deriving (Eq, Show)
 
@@ -316,8 +323,8 @@ pursOpts =
         <*> Opt.strOption
           ( Opt.long "classes"
               <> Opt.metavar "CLASSES"
-              <> Opt.value "css.txt"
-              <> Opt.help "File containing the available classes"
+              <> Opt.value "tailwind-classes.txt"
+              <> Opt.help "File containing the available classes. This is the output from `$ twpurs gen-available-classes`"
               <> Opt.showDefault
           )
         <*> Opt.strOption
@@ -327,6 +334,10 @@ pursOpts =
               <> Opt.value "src/Tailwind.purs"
               <> Opt.help "Output file"
               <> Opt.showDefault
+          )
+        <*> Opt.switch
+          ( Opt.long "all"
+              <> Opt.help "Generate all the available classes"
           )
 
 data CleanCssOptions = CleanCssOptions
@@ -354,21 +365,21 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
           ( Opt.long "src"
               <> Opt.metavar "SRC"
               <> Opt.value "src"
-              <> Opt.help "The PureScript source directory"
+              <> Opt.help "The directory with the PureScript source"
               <> Opt.showDefault
           )
         <*> Opt.strOption
           ( Opt.long "classes"
               <> Opt.metavar "CLASSES"
-              <> Opt.value "css.txt"
-              <> Opt.help "File containing the available classes"
+              <> Opt.value "tailwind-classes.txt"
+              <> Opt.help "File containing the available classes. This is the output from `$ twpurs gen-available-classes`"
               <> Opt.showDefault
           )
         <*> Opt.strOption
           ( Opt.long "css"
               <> Opt.metavar "CSS"
               <> Opt.value "wip/tailwind.css"
-              <> Opt.help "The file with all the generated Tailwind CSS"
+              <> Opt.help "The file with all the Tailwind generated CSS"
               <> Opt.showDefault
           )
         <*> Opt.strOption
@@ -376,6 +387,41 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
               <> Opt.short 'o'
               <> Opt.metavar "OUT"
               <> Opt.value "dist/tailwind.css"
+              <> Opt.help "Output file. This should be the production CSS file"
+              <> Opt.showDefault
+          )
+
+data GenAvaiableClassesOptions = GenAvaiableClassesOptions
+  { genRoot :: FilePath,
+    genInputCss :: FilePath,
+    genOut :: FilePath
+  }
+  deriving (Eq, Show)
+
+genOpts :: Opt.ParserInfo Command
+genOpts = GenAvaiableClasses <$> Opt.info opts (Opt.progDesc desc)
+  where
+    desc = "Generate the list of available classes"
+    opts =
+      GenAvaiableClassesOptions
+        <$> Opt.strArgument
+          ( Opt.metavar "ROOT"
+              <> Opt.value "."
+              <> Opt.help "Root directory of the project"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "css"
+              <> Opt.metavar "CSS"
+              <> Opt.value "dev/tailwind.css"
+              <> Opt.help "The file with all the Tailwind generated CSS"
+              <> Opt.showDefault
+          )
+        <*> Opt.strOption
+          ( Opt.long "out"
+              <> Opt.short 'o'
+              <> Opt.metavar "OUT"
+              <> Opt.value "tailwind-classes.txt"
               <> Opt.help "Output file"
               <> Opt.showDefault
           )
@@ -383,6 +429,7 @@ cssOpts = CleanCss <$> Opt.info opts (Opt.progDesc desc)
 data Command
   = PursClasses PursClassesOptions
   | CleanCss CleanCssOptions
+  | GenAvaiableClasses GenAvaiableClassesOptions
   deriving (Eq, Show)
 
 newtype Options = Options {uncommand :: Command}
@@ -394,11 +441,29 @@ opts =
     (programm <**> Opt.helper)
     (Opt.fullDesc <> Opt.header "Do some Tailwind stuff")
   where
-    programm = Options <$> Opt.hsubparser (purs <> css)
-    purs = Opt.command "purs" pursOpts
-    css = Opt.command "css" cssOpts
+    programm = Options <$> Opt.hsubparser (gen <> purs <> css)
+    gen = Opt.command "gen-available-classes" genOpts
+    purs = Opt.command "gen-purs" pursOpts
+    css = Opt.command "gen-css" cssOpts
 
 -- -----------------------------------------------------------------------------
+mkDefaultGenAvailableClassesConfig :: FilePath -> GenAvaiableClassesOptions
+mkDefaultGenAvailableClassesConfig root =
+  GenAvaiableClassesOptions
+    { genRoot = root,
+      genInputCss = root </> "wip/tailwind.css",
+      genOut = root </> "available-classes.txt"
+    }
+
+normaliseGenAvailableClassesConfig :: GenAvaiableClassesOptions -> IO GenAvaiableClassesOptions
+normaliseGenAvailableClassesConfig (GenAvaiableClassesOptions root css out) = do
+  root <- Dir.makeAbsolute root
+  pure $
+    GenAvaiableClassesOptions
+      { genRoot = root,
+        genInputCss = root </> css,
+        genOut = root </> out
+      }
 
 mkDefaultPursClassesOptions :: FilePath -> PursClassesOptions
 mkDefaultPursClassesOptions root =
@@ -406,18 +471,20 @@ mkDefaultPursClassesOptions root =
     { pursRoot = root,
       pursClasses = root </> "css.txt",
       pursSrc = root </> "src",
-      pursOut = root </> "src/Tailwind.purs"
+      pursOut = root </> "src/Tailwind.purs",
+      pursAll = False
     }
 
 normalisePursClassesConfig :: PursClassesOptions -> IO PursClassesOptions
-normalisePursClassesConfig (PursClassesOptions root src classes out) = do
+normalisePursClassesConfig (PursClassesOptions root src classes out all) = do
   root <- Dir.makeAbsolute root
   pure $
     PursClassesOptions
       { pursRoot = root,
         pursClasses = root </> classes,
         pursSrc = root </> src,
-        pursOut = root </> out
+        pursOut = root </> out,
+        pursAll = all
       }
 
 mkDefaultCleanCssOptions :: FilePath -> CleanCssOptions
@@ -453,13 +520,17 @@ parseInputCss path = BiF.first show <$> parseFromFile cssFile path
 
 generatePursClasses :: PursClassesOptions -> IO ()
 generatePursClasses config = do
-  usedClasses <- extractUsedClasses =<< listFiles (pursSrc config)
   availableClasses <- readAvailableClasses $ pursClasses config
-  let cs = filterUsedClasses <$> usedClasses <*> availableClasses
+  cs <-
+    if pursAll config
+      then pure availableClasses
+      else do
+        usedClasses <- extractUsedClasses =<< listFiles (pursSrc config)
+        pure $ filterUsedClasses <$> usedClasses <*> availableClasses
   case liftA2 (,) <$> fmap length <*> fmap tailwindPurs $ cs of
     Right (count, contents) -> do
       TextIO.writeFile (pursOut config) contents
-      putStrLn $ "Found " <> show count <> " used classes"
+      unless (pursAll config) $ putStrLn $ "Found " <> show count <> " used classes"
       putStrLn $ pursOut config <> " updated succesfully!"
     Left err -> putStrLn err
 
@@ -467,14 +538,14 @@ filterUnusedCss :: [CssClass] -> CssAST -> CssAST
 filterUnusedCss used (CssAST nodes) = CssAST $ Maybe.mapMaybe mapFilterNode nodes
   where
     selectorMatchesClass :: Selector -> CssClass -> Bool
-    selectorMatchesClass (ClassSelector a' _) (CssClass _ a) = a == a'
+    selectorMatchesClass (ClassSelector a' _) (CssClass _ a) = filter (/= '\\') a' == a
     selectorMatchesClass _ _ = False
 
     isGenericSelector :: Selector -> Bool
     isGenericSelector (GenericSelector _) = True
     isGenericSelector _ = False
 
-    -- TODO: simplify filtering logig
+    -- TODO: simplify filtering logic
     mapFilterNode :: CssNode -> Maybe CssNode
     mapFilterNode node@(RuleGroup selectors _) =
       if any (\selector -> isGenericSelector selector || any (selectorMatchesClass selector) used) selectors
@@ -502,9 +573,56 @@ generateOptimizedCSS config = do
       putStrLn $ "Optimized CSS written to " <> cleanOut config
     Left err -> putStrLn err
 
+className (GenericSelector _) = Nothing
+className (ClassSelector class' _) = Just class'
+
+nodeClasses :: CssNode -> [String]
+nodeClasses (RuleGroup selectors _) = Maybe.mapMaybe className $ NE.toList selectors
+nodeClasses (MediaQuery _ nodes) = nodeClasses =<< nodes
+nodeClasses _ = []
+
+replace :: Eq a => a -> a -> [a] -> [a]
+replace a b = map $ \c -> if c == a then b else c
+
+pursifyCssClass :: String -> CssClass
+pursifyCssClass cssClass = CssClass pursName cssNormalised
+  where
+    cssNormalised = filter (/= '\\') cssClass
+    pursName =
+      camel
+        . neg
+        . filter (/= '\\')
+        . replace '/' 'd'
+        . replace ':' '-'
+        $ List.replace ":-" "-neg-" cssClass
+    neg ('-' : ss) = "neg-" ++ ss
+    neg ss = ss
+
+pursAndCss :: CssClass -> String
+pursAndCss cx = classPursName cx <> ";" <> classCssName cx
+
+generateAvailableClasses :: GenAvaiableClassesOptions -> IO ()
+generateAvailableClasses config = do
+  inputCss <- parseInputCss (genInputCss config)
+  let contents =
+        intercalate "\n"
+          . sort
+          . fmap (pursAndCss . pursifyCssClass)
+          . Set.toList
+          . Set.fromList
+          . (nodeClasses =<<)
+          . unAst
+          <$> inputCss
+  case contents of
+    Right availableClasses -> do
+      writeFile (genOut config) availableClasses
+      putStrLn $ "List of all the available classes written to " <> genOut config
+    Left err -> putStrLn err
+
 run :: IO ()
 run = do
   cmd <- uncommand <$> Opt.execParser opts
   case cmd of
-    (PursClasses opts) -> generatePursClasses =<< normalisePursClassesConfig opts
-    (CleanCss opts) -> generateOptimizedCSS =<< normaliseCleanCssConfig opts
+    GenAvaiableClasses opts -> generateAvailableClasses =<< normaliseGenAvailableClassesConfig opts
+    PursClasses opts -> generatePursClasses =<< normalisePursClassesConfig opts
+    CleanCss opts -> generateOptimizedCSS =<< normaliseCleanCssConfig opts

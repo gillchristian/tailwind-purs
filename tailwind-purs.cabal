@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6fd72766a30ec5599f203964ea5870abcd9eec60564f57d23667c4036f813b30
+-- hash: 90c9a59850059d92ec538f3ab1cc1741734eeccd723df2efcb779e4f4f264b0f
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -32,7 +32,9 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
+      MissingH
+    , base >=4.7 && <5
+    , casing
     , containers
     , directory
     , filepath
@@ -49,7 +51,9 @@ executable twpurs
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      MissingH
+    , base >=4.7 && <5
+    , casing
     , containers
     , directory
     , filepath
@@ -68,7 +72,9 @@ test-suite tailwind-purs-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      MissingH
+    , base >=4.7 && <5
+    , casing
     , containers
     , directory
     , filepath
