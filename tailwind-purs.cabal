@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 90c9a59850059d92ec538f3ab1cc1741734eeccd723df2efcb779e4f4f264b0f
+-- hash: 2c33bf03c8ee90886e683318a4c3b771b2bf68d472d1d9f24695a54fb061ad6c
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -78,6 +78,7 @@ test-suite tailwind-purs-test
     , containers
     , directory
     , filepath
+    , hspec
     , optparse-applicative
     , parsec
     , tailwind-purs

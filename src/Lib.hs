@@ -1,29 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lib
-  ( cssFile,
-    generateAvailableClasses,
-    generatePursClasses,
-    mediaQuery,
-    mkDefaultCleanCssOptions,
-    mkDefaultGenAvailableClassesConfig,
-    mkDefaultPursClassesOptions,
-    normalisePursClassesConfig,
-    query,
-    selector,
-    ruleGroup,
-    run,
-    CssAST (..),
-    CssNode (..),
-    PursClassesOptions (..),
-    Selector (..),
-  )
-where
+module Lib where
 
 import Control.Applicative (Applicative (liftA2))
 import Control.Monad (join, unless, void)
 import qualified Data.Bifunctor as BiF
-import Data.Char (isSpace)
+import Data.Char (isNumber, isSpace)
 import qualified Data.Either as Either
 import Data.List (dropWhileEnd, intercalate, sort)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -132,21 +114,21 @@ data CssClass = CssClass
   { classPursName :: String,
     classCssName :: String
   }
-  deriving (Eq, Ord)
+  deriving (Eq, Show, Ord)
 
-instance Show CssClass where
-  show (CssClass name css) =
-    unlines
-      [ "-- | " <> name,
-        name <> " :: ClassName",
-        name <> " = ClassName \"" <> css <> "\""
-      ]
+renderCssClass :: CssClass -> String
+renderCssClass (CssClass name css) =
+  unlines
+    [ "-- | " <> name,
+      name <> " :: ClassName",
+      name <> " = ClassName \"" <> css <> "\""
+    ]
 
 cssClass :: Parser CssClass
 cssClass =
   CssClass
-    <$> P.manyTill P.alphaNum (P.char ';')
-    <*> P.many1 (P.alphaNum <|> P.oneOf "-:/")
+    <$> P.manyTill (P.noneOf ";") (P.char ';')
+    <*> P.many1 (P.noneOf "\n")
 
 classes :: Parser [CssClass]
 classes = cssClass `P.endBy` P.spaces
@@ -194,7 +176,7 @@ tailwindPurs usedClasses =
       classes
     ]
   where
-    classes = Text.intercalate "\n" $ map (Text.pack . show) usedClasses
+    classes = Text.intercalate "\n" $ map (Text.pack . renderCssClass) usedClasses
 
 filterUsedClasses :: [String] -> [CssClass] -> [CssClass]
 filterUsedClasses usedClasses =
@@ -205,37 +187,42 @@ filterUsedClasses usedClasses =
 data Selector
   = GenericSelector String
   | ClassSelector String (Maybe String)
-  deriving (Eq)
+  deriving (Eq, Show)
 
-instance Show Selector where
-  show (GenericSelector selector) = selector -- <> " /* GenericSelector */"
-  show (ClassSelector class' (Just mod)) = "." <> class' <> mod -- <> " /* ClassWithMod */"
-  show (ClassSelector class' Nothing) = "." <> class' -- <> " /* Class */"
+renderSelector :: Selector -> String
+renderSelector (GenericSelector selector) = selector
+renderSelector (ClassSelector cx (Just mod)) = "." <> cx <> mod
+renderSelector (ClassSelector cx Nothing) = "." <> cx
+
+-- renderSelector :: Selector -> String
+-- renderSelector (GenericSelector selector) = selector
+-- renderSelector (ClassSelector cx (Just mod)) = "." <> cx <> "-->" <> mod <> "<--" <> "/* with mod */"
+-- renderSelector (ClassSelector cx Nothing) = "." <> cx <> "/* no mod */"
 
 data CssNode
   = RuleGroup (NonEmpty Selector) String
   | MediaQuery String [CssNode]
   | Query String String [CssNode]
   | Comment String
-  deriving (Eq)
+  deriving (Eq, Show)
 
-instance Show CssNode where
-  show (RuleGroup selectors body) = selectors' <> " {" <> body <> "}"
-    where
-      selectors' = intercalate ",\n" $ NE.toList $ fmap show selectors
-  show (MediaQuery query nodes) = "@media " <> query <> " {\n" <> nodes' <> "\n}"
-    where
-      nodes' = intercalate "\n\n" $ map (("  " ++) . show) nodes
-  show (Query query name nodes) = "@" <> query <> " " <> name <> " {\n" <> nodes' <> "\n}"
-    where
-      nodes' = intercalate "\n\n" $ map (("  " ++) . show) nodes
-  show (Comment c) = "/*" <> c <> "*/"
+renderNode :: CssNode -> String
+renderNode (RuleGroup selectors body) = selectors' <> " {" <> body <> "}"
+  where
+    selectors' = intercalate ",\n" $ NE.toList $ fmap renderSelector selectors
+renderNode (MediaQuery query nodes) = "@media " <> query <> " {\n" <> nodes' <> "\n}"
+  where
+    nodes' = intercalate "\n\n" $ map (("  " ++) . renderNode) nodes
+renderNode (Query query name nodes) = "@" <> query <> " " <> name <> " {\n" <> nodes' <> "\n}"
+  where
+    nodes' = intercalate "\n\n" $ map (("  " ++) . renderNode) nodes
+renderNode (Comment c) = "/*" <> c <> "*/"
 
 newtype CssAST = CssAST {unAst :: [CssNode]}
-  deriving (Eq)
+  deriving (Eq, Show)
 
-instance Show CssAST where
-  show (CssAST nodes) = intercalate "\n\n" (map show nodes) <> "\n"
+renderCss :: CssAST -> String
+renderCss (CssAST nodes) = intercalate "\n\n" (map renderNode nodes) <> "\n"
 
 trimEnd :: String -> String
 trimEnd = dropWhileEnd isSpace
@@ -245,6 +232,7 @@ selector = P.try class' <|> generic
   where
     generic = GenericSelector . trimEnd <$> P.many1 (P.noneOf ",{}") <* P.spaces
     tillEscapedColon = (++ "\\:") <$> P.manyTill (P.noneOf ",{: ") (P.string "\\:")
+    -- TODO: re-write this parser
     class' = do
       void $ P.char '.'
       before <- P.try (join <$> P.many (P.try tillEscapedColon)) <|> P.many1 (P.noneOf ",{: ")
@@ -569,7 +557,7 @@ generateOptimizedCSS config = do
   case outputCss of
     Right css -> do
       -- TODO stats (eg. size before & after)
-      writeFile (cleanOut config) $ show css
+      writeFile (cleanOut config) $ renderCss css
       putStrLn $ "Optimized CSS written to " <> cleanOut config
     Left err -> putStrLn err
 
@@ -584,36 +572,47 @@ nodeClasses _ = []
 replace :: Eq a => a -> a -> [a] -> [a]
 replace a b = map $ \c -> if c == a then b else c
 
-pursifyCssClass :: String -> CssClass
-pursifyCssClass cssClass = CssClass pursName cssNormalised
+startsWith :: (a -> Bool) -> [a] -> Bool
+startsWith _ [] = False
+startsWith f (x : _) = f x
+
+cssToPursName :: String -> String
+cssToPursName =
+  num
+    . camel
+    . neg
+    . filter (/= '\\')
+    . replace '/' 'd'
+    . replace ':' '-'
+    . replace '.' 'p'
+    . List.replace ":-" "-neg-"
   where
-    cssNormalised = filter (/= '\\') cssClass
-    pursName =
-      camel
-        . neg
-        . filter (/= '\\')
-        . replace '/' 'd'
-        . replace ':' '-'
-        $ List.replace ":-" "-neg-" cssClass
-    neg ('-' : ss) = "neg-" ++ ss
-    neg ss = ss
+    neg s = if startsWith (== '-') s then "neg-" ++ s else s
+    num s = if startsWith isNumber s then '_' : s else s
+
+escapeCssName :: String -> String
+escapeCssName = filter (/= '\\')
+
+pursifyCssClass :: String -> CssClass
+pursifyCssClass = CssClass <$> cssToPursName <*> escapeCssName
 
 pursAndCss :: CssClass -> String
 pursAndCss cx = classPursName cx <> ";" <> classCssName cx
 
+cssToAvailableClasses :: CssAST -> String
+cssToAvailableClasses =
+  intercalate "\n"
+    . sort
+    . fmap (pursAndCss . pursifyCssClass)
+    . Set.toList
+    . Set.fromList
+    . (nodeClasses =<<)
+    . unAst
+
 generateAvailableClasses :: GenAvaiableClassesOptions -> IO ()
 generateAvailableClasses config = do
   inputCss <- parseInputCss (genInputCss config)
-  let contents =
-        intercalate "\n"
-          . sort
-          . fmap (pursAndCss . pursifyCssClass)
-          . Set.toList
-          . Set.fromList
-          . (nodeClasses =<<)
-          . unAst
-          <$> inputCss
-  case contents of
+  case cssToAvailableClasses <$> inputCss of
     Right availableClasses -> do
       writeFile (genOut config) availableClasses
       putStrLn $ "List of all the available classes written to " <> genOut config
