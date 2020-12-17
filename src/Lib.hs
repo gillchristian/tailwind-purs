@@ -194,11 +194,6 @@ renderSelector (GenericSelector selector) = selector
 renderSelector (ClassSelector cx (Just mod)) = "." <> cx <> mod
 renderSelector (ClassSelector cx Nothing) = "." <> cx
 
--- renderSelector :: Selector -> String
--- renderSelector (GenericSelector selector) = selector
--- renderSelector (ClassSelector cx (Just mod)) = "." <> cx <> "-->" <> mod <> "<--" <> "/* with mod */"
--- renderSelector (ClassSelector cx Nothing) = "." <> cx <> "/* no mod */"
-
 data CssNode
   = RuleGroup (NonEmpty Selector) String
   | MediaQuery String [CssNode]
