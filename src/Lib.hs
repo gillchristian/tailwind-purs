@@ -227,18 +227,26 @@ renderCss (CssAST nodes) = intercalate "\n\n" (map renderNode nodes) <> "\n"
 trimEnd :: String -> String
 trimEnd = dropWhileEnd isSpace
 
-selector :: Parser Selector
-selector = P.try class' <|> generic
+genericSelector :: Parser Selector
+genericSelector = GenericSelector . trimEnd <$> P.many1 (P.noneOf ",{}") <* P.spaces
+
+classSelector :: Parser Selector
+classSelector = do
+  void $ P.char '.'
+  className <- join <$> P.many (P.try escape <|> fmap pure nonEscape)
+  mod <- trimEnd <$> P.many (P.noneOf ",{")
+  pure $ ClassSelector className $ NE.toList <$> NE.nonEmpty mod
   where
-    generic = GenericSelector . trimEnd <$> P.many1 (P.noneOf ",{}") <* P.spaces
-    tillEscapedColon = (++ "\\:") <$> P.manyTill (P.noneOf ",{: ") (P.string "\\:")
-    -- TODO: re-write this parser
-    class' = do
-      void $ P.char '.'
-      before <- P.try (join <$> P.many (P.try tillEscapedColon)) <|> P.many1 (P.noneOf ",{: ")
-      after <- P.many (P.noneOf ",{: ")
-      mod <- trimEnd <$> P.many (P.noneOf ",{")
-      pure $ ClassSelector (before <> after) $ NE.toList <$> NE.nonEmpty mod
+    nonEscape :: Parser Char
+    nonEscape = P.noneOf ",:{ "
+    escape :: Parser String
+    escape = do
+      d <- P.char '\\'
+      c <- P.noneOf " \n\t"
+      pure [d, c]
+
+selector :: Parser Selector
+selector = P.try classSelector <|> genericSelector
 
 brackets :: Parser a -> Parser a
 brackets = P.between (P.char '{') (P.char '}')
