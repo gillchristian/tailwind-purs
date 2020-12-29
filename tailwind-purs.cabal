@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e6116cf3a83f807554322bf149fbd90ea0a63199ffa915d957888a5a0b2b9477
+-- hash: b13c71935222410ca060a74e9f8fa72417c7a3b06ae9d324d79623c3fc976801
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -29,6 +29,7 @@ library
       CLI
       CSS
       Lib
+      PureScript
       Text.Render
       Util
   other-modules:
