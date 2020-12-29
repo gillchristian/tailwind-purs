@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: twitch-0.1.7.2@sha256:146a887da4d2d21e489ff823a6058add40c1f9c5ee8e0d00356b497092c9c624,2988
+    pantry-tree:
+      size: 1138
+      sha256: 7e4db8b9ef3e634e68d68155901a7c3affb873b3cf9a9dca4dcc0ebb4b6eb527
+  original:
+    hackage: twitch-0.1.7.2@sha256:146a887da4d2d21e489ff823a6058add40c1f9c5ee8e0d00356b497092c9c624,2988
 snapshots:
 - completed:
     size: 532832

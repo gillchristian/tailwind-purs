@@ -16,11 +16,14 @@ dependencies:
 - MissingH
 - casing
 - containers
+- data-default
 - directory
 - filepath
 - optparse-applicative
 - parsec
+- stm
 - text
+- twitch
 
 library:
   source-dirs: src

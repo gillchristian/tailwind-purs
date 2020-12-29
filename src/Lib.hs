@@ -6,13 +6,17 @@ import AvailableClasses
 import CLI
 import qualified CSS
 import Control.Applicative (Applicative (liftA2))
-import Control.Monad (join, unless)
+import qualified Control.Concurrent.STM as STM
+import Control.Monad (join, unless, when)
 import qualified Data.Bifunctor as BiF
 import Data.Char (isNumber)
+import Data.Default (def)
 import qualified Data.Either as Either
+import Data.Foldable (Foldable (fold))
 import Data.List (intercalate, sort)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.List.Utils as List
+import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -27,6 +31,8 @@ import qualified System.FilePath as Path
 import Text.Casing (camel)
 import Text.Parsec.Text (parseFromFile)
 import Text.Render
+import Twitch ((|-), (|>))
+import qualified Twitch
 import Util
 
 newtype FileName = FileName FilePath
@@ -133,21 +139,77 @@ filterUsedClasses :: [String] -> [CssClass] -> [CssClass]
 filterUsedClasses usedClasses =
   filter $ \(CssClass name _) -> name `elem` usedClasses
 
-generatePursClasses :: PursClassesOptions -> IO ()
-generatePursClasses config = do
-  classes <- readAvailableClasses $ pursClasses config
+generateOnce :: PursClassesOptions -> Either String [CssClass] -> IO ()
+generateOnce config classes = do
   cs <-
     if pursAll config
       then pure classes
       else do
         usedClasses <- extractUsedClasses =<< listFiles (pursSrc config)
         pure $ filterUsedClasses <$> usedClasses <*> classes
+  generate config cs
+
+generate :: PursClassesOptions -> Either String [CssClass] -> IO ()
+generate config cs =
   case liftA2 (,) <$> fmap length <*> fmap PS.tailwindModule $ cs of
+    Left err -> putStrLn err
     Right (count, contents) -> do
       TextIO.writeFile (pursOut config) contents
       unless (pursAll config) $ putStrLn $ "Found " <> show count <> " used classes"
-      putStrLn $ pursOut config <> " updated succesfully!"
+      putStrLn $ List.replace (pursRoot config <> "/") "" (pursOut config) <> " updated succesfully!"
+
+generateWatchMode :: PursClassesOptions -> Either String [CssClass] -> IO ()
+generateWatchMode config classes = do
+  generateOnce (config {pursAll = False}) classes
+  files <- listFiles (pursSrc config)
+  eFilesMap <- fmap Map.fromList . sequence <$> traverse extract files
+
+  case eFilesMap of
     Left err -> putStrLn err
+    Right filesMap -> do
+      files <- STM.newTVarIO filesMap
+
+      let conf = def {Twitch.root = Just $ pursSrc config, Twitch.usePolling = False}
+
+      Twitch.defaultMainWithOptions conf $ do
+        "./**/*.purs" |> \changedFile ->
+          when (pursOut config /= changedFile) $ do
+            extracedClasses <- extractClasses changedFile
+            case extracedClasses of
+              Left err -> do
+                putStrLn $ "Failed to parse " <> changedFile
+                putStrLn err
+              Right newClasses -> do
+                (didChange, usedClases) <- STM.atomically $ do
+                  before <- sort . fold <$> STM.readTVar files
+                  STM.modifyTVar files $ Map.insert changedFile newClasses
+                  after <- sort . fold <$> STM.readTVar files
+                  pure (before /= after, after)
+                when didChange $ do
+                  putStrLn $ List.replace (pursRoot config <> "/") "" changedFile <> " changed"
+                  generate config $ filterUsedClasses usedClases <$> classes
+                  putStrLn ""
+        "./**/*.purs" |- \deletedFile ->
+          when (pursOut config /= deletedFile) $ do
+            (didChange, usedClases) <- STM.atomically $ do
+              before <- sort . fold <$> STM.readTVar files
+              STM.modifyTVar files $ Map.delete deletedFile
+              after <- sort . fold <$> STM.readTVar files
+              pure (before /= after, after)
+            when didChange $ do
+              putStrLn $ List.replace (pursRoot config <> "/") "" deletedFile <> " changed"
+              generate config $ filterUsedClasses usedClases <$> classes
+              putStrLn ""
+  where
+    extract :: FilePath -> IO (Either String (FilePath, [String]))
+    extract path = fmap ((,) path) <$> extractClasses path
+
+generatePursClasses :: PursClassesOptions -> IO ()
+generatePursClasses config = do
+  classes <- readAvailableClasses $ pursClasses config
+  if pursWatch config
+    then generateWatchMode config classes
+    else generateOnce config classes
 
 filterUnusedCss :: [CssClass] -> CSS.AST -> CSS.AST
 filterUnusedCss used (CSS.AST nodes) = CSS.AST $ Maybe.mapMaybe mapFilterNode nodes
