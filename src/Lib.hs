@@ -3,6 +3,7 @@
 module Lib where
 
 import CLI
+import qualified CSS
 import Control.Applicative (Applicative (liftA2))
 import Control.Monad (join, unless)
 import qualified Data.Bifunctor as BiF
@@ -19,17 +20,15 @@ import qualified Data.Text.IO as TextIO
 import Data.Tree (Tree (..))
 import qualified Data.Tree as Tree
 import qualified Options.Applicative as Opt
+import qualified PureScript as PS
 import qualified System.Directory as Dir
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
 import Text.Casing (camel)
-import Text.Parsec ((<|>))
 import qualified Text.Parsec as P
 import Text.Parsec.Text (Parser, parseFromFile)
 import Text.Render
 import Util
-
-import qualified CSS
 
 newtype FileName = FileName FilePath
   deriving (Show, Eq, Ord)
@@ -136,36 +135,11 @@ cssClass =
 classes :: Parser [CssClass]
 classes = cssClass `P.endBy` P.spaces
 
--- -----------------------------------------------------------------------------
---
--- PureScript
-
-data AST
-  = TailwindClass String
-  | CharNode
-  deriving (Eq, Ord, Show)
-
-node :: Parser AST
-node = P.try classP <|> charNodeP
-
-classP :: Parser AST
-classP = TailwindClass <$> (P.string "T." *> P.many P.alphaNum)
-
-charNodeP :: Parser AST
-charNodeP = CharNode <$ P.anyChar
-
-getClassName :: AST -> Maybe String
-getClassName (TailwindClass name) = Just name
-getClassName _ = Nothing
-
-classesP :: Parser [String]
-classesP = Maybe.mapMaybe getClassName <$> P.many node
-
 extractClasses :: FilePath -> IO (Either String [String])
 extractClasses path = do
   contents <- TextIO.readFile path
   if "import Tailwind as T" `Text.isInfixOf` contents
-    then pure $ BiF.first show $ P.parse classesP path contents
+    then pure $ PS.tailwindClassNames path contents
     else pure $ Right []
 
 -- -----------------------------------------------------------------------------

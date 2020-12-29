@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+import qualified CSS
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Lib
-import qualified CSS
+import qualified PureScript as PS
 import Test.Hspec
 import qualified Text.Parsec as P
 import Text.Render
@@ -50,7 +51,7 @@ main = hspec $ do
       cssToPursName "focus:-rotate-12" === "focusNegRotate12"
       cssToPursName "lg:-bottom-0.5" === "lgNegBottom0p5"
 
-  describe "classesP" $
+  describe "PureScript.tailwindClassNames" $
     it "extracts Tailwind classes from PureScript code" $ do
       let input =
             toText
@@ -70,7 +71,9 @@ main = hspec $ do
                 "    , HH.p [ HP.classes [ T.flex, T.flexCol ] ] [ HH.text user.name ]",
                 "    ]"
               ]
-      P.parse classesP "classesP" input === Right ["minHScreen", "bgGray200", "container", "flex", "flexCol"]
+          actual = PS.tailwindClassNames "PureScript.tailwindClassNames" input
+          expected = Right ["minHScreen", "bgGray200", "container", "flex", "flexCol"]
+      actual === expected
 
   describe "cssToAvailableClasses" $
     it "transforms a css ast to available classes format" $ do
