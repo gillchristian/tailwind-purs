@@ -10,7 +10,8 @@ data PursClassesOptions = PursClassesOptions
     pursSrc :: FilePath,
     pursClasses :: FilePath,
     pursOut :: FilePath,
-    pursAll :: Bool
+    pursAll :: Bool,
+    pursWatch :: Bool
   }
   deriving (Eq, Show)
 
@@ -52,6 +53,11 @@ pursOpts =
         <*> Opt.switch
           ( Opt.long "all"
               <> Opt.help "Generate all the available classes"
+          )
+        <*> Opt.switch
+          ( Opt.long "watch"
+              <> Opt.short 'w'
+              <> Opt.help "Run in watch mode. `--all` is ingored."
           )
 
 data CleanCssOptions = CleanCssOptions
@@ -185,11 +191,12 @@ mkDefaultPursClassesOptions root =
       pursClasses = root </> "css.txt",
       pursSrc = root </> "src",
       pursOut = root </> "src/Tailwind.purs",
-      pursAll = False
+      pursAll = False,
+      pursWatch = False
     }
 
 normalisePursClassesConfig :: PursClassesOptions -> IO PursClassesOptions
-normalisePursClassesConfig (PursClassesOptions root src classes out all) = do
+normalisePursClassesConfig (PursClassesOptions root src classes out all watch) = do
   root <- Dir.makeAbsolute root
   pure $
     PursClassesOptions
@@ -197,7 +204,8 @@ normalisePursClassesConfig (PursClassesOptions root src classes out all) = do
         pursClasses = root </> classes,
         pursSrc = root </> src,
         pursOut = root </> out,
-        pursAll = all
+        pursAll = all,
+        pursWatch = watch
       }
 
 mkDefaultCleanCssOptions :: FilePath -> CleanCssOptions

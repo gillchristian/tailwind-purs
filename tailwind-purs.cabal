@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b5aec1d201dda2cbce83f54614eac85b8ba3ade2a30db6a999c539260beaf934
+-- hash: 21d03e2c927dc7653208328d38c9e0fe059507efe2a417a3431d9da31e49dc94
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -42,11 +42,14 @@ library
     , base >=4.7 && <5
     , casing
     , containers
+    , data-default
     , directory
     , filepath
     , optparse-applicative
     , parsec
+    , stm
     , text
+    , twitch
   default-language: Haskell2010
 
 executable twpurs
@@ -61,12 +64,15 @@ executable twpurs
     , base >=4.7 && <5
     , casing
     , containers
+    , data-default
     , directory
     , filepath
     , optparse-applicative
     , parsec
+    , stm
     , tailwind-purs
     , text
+    , twitch
   default-language: Haskell2010
 
 test-suite tailwind-purs-test
@@ -82,11 +88,14 @@ test-suite tailwind-purs-test
     , base >=4.7 && <5
     , casing
     , containers
+    , data-default
     , directory
     , filepath
     , hspec
     , optparse-applicative
     , parsec
+    , stm
     , tailwind-purs
     , text
+    , twitch
   default-language: Haskell2010
