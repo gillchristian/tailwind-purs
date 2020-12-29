@@ -3,12 +3,11 @@
 module Lib where
 
 import Control.Applicative (Applicative (liftA2))
-import Control.Monad (join, unless, void)
+import Control.Monad (join, unless)
 import qualified Data.Bifunctor as BiF
-import Data.Char (isNumber, isSpace)
+import Data.Char (isNumber)
 import qualified Data.Either as Either
-import Data.List (dropWhileEnd, intercalate, sort)
-import Data.List.NonEmpty (NonEmpty (..))
+import Data.List (intercalate, sort)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.List.Utils as List
 import qualified Data.Maybe as Maybe
@@ -27,6 +26,10 @@ import Text.Casing (camel)
 import Text.Parsec ((<|>))
 import qualified Text.Parsec as P
 import Text.Parsec.Text (Parser, parseFromFile)
+import Text.Render
+import Util
+
+import qualified CSS
 
 newtype FileName = FileName FilePath
   deriving (Show, Eq, Ord)
@@ -116,13 +119,13 @@ data CssClass = CssClass
   }
   deriving (Eq, Show, Ord)
 
-renderCssClass :: CssClass -> String
-renderCssClass (CssClass name css) =
-  unlines
-    [ "-- | " <> name,
-      name <> " :: ClassName",
-      name <> " = ClassName \"" <> css <> "\""
-    ]
+instance Render CssClass where
+  render (CssClass name css) =
+    unlines
+      [ "-- | " <> name,
+        name <> " :: ClassName",
+        name <> " = ClassName \"" <> css <> "\""
+      ]
 
 cssClass :: Parser CssClass
 cssClass =
@@ -134,6 +137,8 @@ classes :: Parser [CssClass]
 classes = cssClass `P.endBy` P.spaces
 
 -- -----------------------------------------------------------------------------
+--
+-- PureScript
 
 data AST
   = TailwindClass String
@@ -176,109 +181,11 @@ tailwindPurs usedClasses =
       classes
     ]
   where
-    classes = Text.intercalate "\n" $ map (Text.pack . renderCssClass) usedClasses
+    classes = Text.intercalate "\n" $ map (Text.pack . render) usedClasses
 
 filterUsedClasses :: [String] -> [CssClass] -> [CssClass]
 filterUsedClasses usedClasses =
   filter $ \(CssClass name _) -> name `elem` usedClasses
-
--- -----------------------------------------------------------------------------
-
-data Selector
-  = GenericSelector String
-  | ClassSelector String (Maybe String)
-  deriving (Eq, Show)
-
-renderSelector :: Selector -> String
-renderSelector (GenericSelector selector) = selector
-renderSelector (ClassSelector cx (Just mod)) = "." <> cx <> mod
-renderSelector (ClassSelector cx Nothing) = "." <> cx
-
-data CssNode
-  = RuleGroup (NonEmpty Selector) String
-  | MediaQuery String [CssNode]
-  | Query String String [CssNode]
-  | Comment String
-  deriving (Eq, Show)
-
-renderNode :: CssNode -> String
-renderNode (RuleGroup selectors body) = selectors' <> " {" <> body <> "}"
-  where
-    selectors' = intercalate ",\n" $ NE.toList $ fmap renderSelector selectors
-renderNode (MediaQuery query nodes) = "@media " <> query <> " {\n" <> nodes' <> "\n}"
-  where
-    nodes' = intercalate "\n\n" $ map (("  " ++) . renderNode) nodes
-renderNode (Query query name nodes) = "@" <> query <> " " <> name <> " {\n" <> nodes' <> "\n}"
-  where
-    nodes' = intercalate "\n\n" $ map (("  " ++) . renderNode) nodes
-renderNode (Comment c) = "/*" <> c <> "*/"
-
-newtype CssAST = CssAST {unAst :: [CssNode]}
-  deriving (Eq, Show)
-
-renderCss :: CssAST -> String
-renderCss (CssAST nodes) = intercalate "\n\n" (map renderNode nodes) <> "\n"
-
-trimEnd :: String -> String
-trimEnd = dropWhileEnd isSpace
-
-genericSelector :: Parser Selector
-genericSelector = GenericSelector . trimEnd <$> P.many1 (P.noneOf ",{}") <* P.spaces
-
-classSelector :: Parser Selector
-classSelector = do
-  void $ P.char '.'
-  className <- join <$> P.many (P.try escape <|> fmap pure nonEscape)
-  mod <- trimEnd <$> P.many (P.noneOf ",{")
-  pure $ ClassSelector className $ NE.toList <$> NE.nonEmpty mod
-  where
-    nonEscape :: Parser Char
-    nonEscape = P.noneOf ",:{ "
-    escape :: Parser String
-    escape = do
-      d <- P.char '\\'
-      c <- P.noneOf " \n\t"
-      pure [d, c]
-
-selector :: Parser Selector
-selector = P.try classSelector <|> genericSelector
-
-brackets :: Parser a -> Parser a
-brackets = P.between (P.char '{') (P.char '}')
-
-ruleGroup :: Parser CssNode
-ruleGroup = do
-  selectors <- P.sepBy1 selector (P.char ',' <* P.spaces)
-  body <- brackets $ P.many $ P.noneOf "}"
-  P.spaces
-  -- selectors is guaranteed to have at least one item becase of P.sepBy1
-  pure $ RuleGroup (NE.fromList selectors) body
-
-mediaQuery :: Parser CssNode
-mediaQuery = do
-  void $ P.string "@media" <* P.spaces
-  q <- P.many (P.noneOf "{")
-  ruleGroups <- brackets $ P.spaces *> P.many (P.try mediaQuery <|> ruleGroup)
-  P.spaces
-  pure $ MediaQuery (trimEnd q) ruleGroups
-
-query :: Parser CssNode
-query = do
-  q <- P.char '@' *> P.many (P.noneOf " ") <* P.spaces
-  name <- P.many P.alphaNum <* P.spaces
-  ruleGroups <- brackets $ P.spaces *> P.many ruleGroup
-  P.spaces
-  pure $ Query q name ruleGroups
-
-comment :: Parser CssNode
-comment = do
-  void $ P.string "/*"
-  Comment <$> P.manyTill P.anyChar (P.try $ P.string "*/") <* P.spaces
-
-cssFile :: Parser CssAST
-cssFile = CssAST <$> P.many node <* P.spaces <* P.eof
-  where
-    node = P.try comment <|> P.try mediaQuery <|> P.try query <|> ruleGroup
 
 -- -----------------------------------------------------------------------------
 
@@ -437,7 +344,6 @@ opts =
     purs = Opt.command "gen-purs" pursOpts
     css = Opt.command "gen-css" cssOpts
 
--- -----------------------------------------------------------------------------
 mkDefaultGenAvailableClassesConfig :: FilePath -> GenAvaiableClassesOptions
 mkDefaultGenAvailableClassesConfig root =
   GenAvaiableClassesOptions
@@ -500,14 +406,16 @@ normaliseCleanCssConfig (CleanCssOptions root src classes css out) = do
         cleanOut = root </> out
       }
 
+-- -----------------------------------------------------------------------------
+
 extractUsedClasses :: [FilePath] -> IO (Either String [String])
 extractUsedClasses files = fmap join . sequence <$> traverse extractClasses files
 
 readAvailableClasses :: FilePath -> IO (Either String [CssClass])
 readAvailableClasses path = BiF.first show <$> parseFromFile classes path
 
-parseInputCss :: FilePath -> IO (Either String CssAST)
-parseInputCss path = BiF.first show <$> parseFromFile cssFile path
+parseInputCss :: FilePath -> IO (Either String CSS.AST)
+parseInputCss path = BiF.first show <$> parseFromFile CSS.cssFile path
 
 generatePursClasses :: PursClassesOptions -> IO ()
 generatePursClasses config = do
@@ -525,31 +433,31 @@ generatePursClasses config = do
       putStrLn $ pursOut config <> " updated succesfully!"
     Left err -> putStrLn err
 
-filterUnusedCss :: [CssClass] -> CssAST -> CssAST
-filterUnusedCss used (CssAST nodes) = CssAST $ Maybe.mapMaybe mapFilterNode nodes
+filterUnusedCss :: [CssClass] -> CSS.AST -> CSS.AST
+filterUnusedCss used (CSS.AST nodes) = CSS.AST $ Maybe.mapMaybe mapFilterNode nodes
   where
-    selectorMatchesClass :: Selector -> CssClass -> Bool
-    selectorMatchesClass (ClassSelector a' _) (CssClass _ a) = filter (/= '\\') a' == a
+    selectorMatchesClass :: CSS.Selector -> CssClass -> Bool
+    selectorMatchesClass (CSS.ClassSelector a' _) (CssClass _ a) = filter (/= '\\') a' == a
     selectorMatchesClass _ _ = False
 
-    isGenericSelector :: Selector -> Bool
-    isGenericSelector (GenericSelector _) = True
+    isGenericSelector :: CSS.Selector -> Bool
+    isGenericSelector (CSS.GenericSelector _) = True
     isGenericSelector _ = False
 
     -- TODO: simplify filtering logic
-    mapFilterNode :: CssNode -> Maybe CssNode
-    mapFilterNode node@(RuleGroup selectors _) =
+    mapFilterNode :: CSS.CssNode -> Maybe CSS.CssNode
+    mapFilterNode node@(CSS.RuleGroup selectors _) =
       if any (\selector -> isGenericSelector selector || any (selectorMatchesClass selector) used) selectors
         then Just node
         else Nothing
-    mapFilterNode (Comment _) = Nothing
-    mapFilterNode node@Query {} = Just node
-    mapFilterNode (MediaQuery q children) =
+    mapFilterNode (CSS.Comment _) = Nothing
+    mapFilterNode node@CSS.Query {} = Just node
+    mapFilterNode (CSS.MediaQuery q children) =
       if not . null $ filtered
-        then Just $ MediaQuery q filtered
+        then Just $ CSS.MediaQuery q filtered
         else Nothing
       where
-        filtered = unAst $ filterUnusedCss used $ CssAST children
+        filtered = CSS.unAst $ filterUnusedCss used $ CSS.AST children
 
 generateOptimizedCSS :: CleanCssOptions -> IO ()
 generateOptimizedCSS config = do
@@ -560,24 +468,17 @@ generateOptimizedCSS config = do
   case outputCss of
     Right css -> do
       -- TODO stats (eg. size before & after)
-      writeFile (cleanOut config) $ renderCss css
+      writeFile (cleanOut config) $ render css
       putStrLn $ "Optimized CSS written to " <> cleanOut config
     Left err -> putStrLn err
 
-className (GenericSelector _) = Nothing
-className (ClassSelector class' _) = Just class'
+className (CSS.GenericSelector _) = Nothing
+className (CSS.ClassSelector class' _) = Just class'
 
-nodeClasses :: CssNode -> [String]
-nodeClasses (RuleGroup selectors _) = Maybe.mapMaybe className $ NE.toList selectors
-nodeClasses (MediaQuery _ nodes) = nodeClasses =<< nodes
+nodeClasses :: CSS.CssNode -> [String]
+nodeClasses (CSS.RuleGroup selectors _) = Maybe.mapMaybe className $ NE.toList selectors
+nodeClasses (CSS.MediaQuery _ nodes) = nodeClasses =<< nodes
 nodeClasses _ = []
-
-replace :: Eq a => a -> a -> [a] -> [a]
-replace a b = map $ \c -> if c == a then b else c
-
-startsWith :: (a -> Bool) -> [a] -> Bool
-startsWith _ [] = False
-startsWith f (x : _) = f x
 
 cssToPursName :: String -> String
 cssToPursName =
@@ -602,7 +503,7 @@ pursifyCssClass = CssClass <$> cssToPursName <*> escapeCssName
 pursAndCss :: CssClass -> String
 pursAndCss cx = classPursName cx <> ";" <> classCssName cx
 
-cssToAvailableClasses :: CssAST -> String
+cssToAvailableClasses :: CSS.AST -> String
 cssToAvailableClasses =
   intercalate "\n"
     . sort
@@ -610,7 +511,7 @@ cssToAvailableClasses =
     . Set.toList
     . Set.fromList
     . (nodeClasses =<<)
-    . unAst
+    . CSS.unAst
 
 generateAvailableClasses :: GenAvaiableClassesOptions -> IO ()
 generateAvailableClasses config = do
