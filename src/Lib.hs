@@ -15,7 +15,6 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.List.Utils as List
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Data.Tree (Tree (..))
@@ -26,8 +25,7 @@ import qualified System.Directory as Dir
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
 import Text.Casing (camel)
-import qualified Text.Parsec as P
-import Text.Parsec.Text (Parser, parseFromFile)
+import Text.Parsec.Text (parseFromFile)
 import Text.Render
 import Util
 
@@ -112,12 +110,6 @@ listFiles path = do
   pure $ fmap filePath $ join $ Tree.flatten $ fmap dirFiles dir
 
 -- -----------------------------------------------------------------------------
-
-filterUsedClasses :: [String] -> [CssClass] -> [CssClass]
-filterUsedClasses usedClasses =
-  filter $ \(CssClass name _) -> name `elem` usedClasses
-
--- -----------------------------------------------------------------------------
 -- Business Logic
 -- -----------------------------------------------------------------------------
 
@@ -136,6 +128,10 @@ readAvailableClasses path = BiF.first show <$> parseFromFile availableClasses pa
 
 parseInputCss :: FilePath -> IO (Either String CSS.AST)
 parseInputCss path = BiF.first show <$> parseFromFile CSS.cssFile path
+
+filterUsedClasses :: [String] -> [CssClass] -> [CssClass]
+filterUsedClasses usedClasses =
+  filter $ \(CssClass name _) -> name `elem` usedClasses
 
 generatePursClasses :: PursClassesOptions -> IO ()
 generatePursClasses config = do
