@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2c33bf03c8ee90886e683318a4c3b771b2bf68d472d1d9f24695a54fb061ad6c
+-- hash: 59400edd8043ece81fa25db4488971a6b80c8ebafade847be38e69e327edf0f8
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -26,7 +26,10 @@ source-repository head
 
 library
   exposed-modules:
+      CSS
       Lib
+      Text.Render
+      Util
   other-modules:
       Paths_tailwind_purs
   hs-source-dirs:

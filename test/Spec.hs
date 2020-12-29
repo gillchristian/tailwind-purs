@@ -5,8 +5,10 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Lib
+import qualified CSS
 import Test.Hspec
 import qualified Text.Parsec as P
+import Text.Render
 
 (===) :: (HasCallStack, Show a, Eq a) => a -> a -> Expectation
 (===) = shouldBe
@@ -73,46 +75,46 @@ main = hspec $ do
   describe "cssToAvailableClasses" $
     it "transforms a css ast to available classes format" $ do
       let input =
-            CssAST
+            CSS.AST
               [ -- other nodes
-                Comment " some comment ",
-                RuleGroup (GenericSelector "body" :| []) "margin: 0;",
-                RuleGroup (GenericSelector "*" :| []) "--tw-shadow: 0 0 #0000;",
-                Comment " other comment ",
+                CSS.Comment " some comment ",
+                CSS.RuleGroup (CSS.GenericSelector "body" :| []) "margin: 0;",
+                CSS.RuleGroup (CSS.GenericSelector "*" :| []) "--tw-shadow: 0 0 #0000;",
+                CSS.Comment " other comment ",
                 -- duplicates
-                RuleGroup (ClassSelector "flex" Nothing :| []) "display: flex;",
-                RuleGroup (ClassSelector "flex" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "flex" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "flex" Nothing :| []) "display: flex;",
                 -- classes with special characters
-                RuleGroup (ClassSelector "camel-case-names" Nothing :| []) "display: flex;",
-                RuleGroup (ClassSelector "focus\\:-rotate-12" Nothing :| []) "display: flex;",
-                RuleGroup (ClassSelector "lg\\:hover\\:translate-y-1" Nothing :| []) "display: flex;",
-                RuleGroup (ClassSelector "bottom-0\\.5" Nothing :| []) "display: flex;",
-                RuleGroup (ClassSelector "bottom-1/2" Nothing :| []) "display: flex;",
-                RuleGroup (ClassSelector "pointer" (Just ":hover") :| []) "cursor: pointer;",
+                CSS.RuleGroup (CSS.ClassSelector "camel-case-names" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "focus\\:-rotate-12" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "lg\\:hover\\:translate-y-1" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "bottom-0\\.5" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "bottom-1/2" Nothing :| []) "display: flex;",
+                CSS.RuleGroup (CSS.ClassSelector "pointer" (Just ":hover") :| []) "cursor: pointer;",
                 -- multiple classes
-                RuleGroup
-                  ( ClassSelector "class-1" (Just ":hover")
-                      :| [ClassSelector "class-2" Nothing, ClassSelector "class-3" Nothing]
+                CSS.RuleGroup
+                  ( CSS.ClassSelector "class-1" (Just ":hover")
+                      :| [CSS.ClassSelector "class-2" Nothing, CSS.ClassSelector "class-3" Nothing]
                   )
                   "cursor: pointer;",
                 -- media queries
-                MediaQuery
+                CSS.MediaQuery
                   "(min-width: 640px)"
-                  [ RuleGroup
-                      (ClassSelector "media-1" (Just ":hover") :| [])
+                  [ CSS.RuleGroup
+                      (CSS.ClassSelector "media-1" (Just ":hover") :| [])
                       "cursor: pointer;"
                   ],
-                MediaQuery
+                CSS.MediaQuery
                   "(min-width: 640px)"
-                  [ MediaQuery
+                  [ CSS.MediaQuery
                       "(min-width: 320px)"
-                      [RuleGroup (ClassSelector "media-2" (Just ":hover") :| []) "cursor: pointer;"]
+                      [CSS.RuleGroup (CSS.ClassSelector "media-2" (Just ":hover") :| []) "cursor: pointer;"]
                   ],
                 -- other queries
-                Query
+                CSS.Query
                   "keyframes"
                   "spin"
-                  [RuleGroup (GenericSelector "to" :| []) "transform: rotate(360deg);"]
+                  [CSS.RuleGroup (CSS.GenericSelector "to" :| []) "transform: rotate(360deg);"]
               ]
           expected =
             intercalate
@@ -181,45 +183,45 @@ main = hspec $ do
                 "}"
               ]
           expected =
-            CssAST
-              [ Comment " a comment ",
-                RuleGroup (GenericSelector "body" :| []) "\n  margin: 0;\n",
-                RuleGroup (GenericSelector "b" :| [GenericSelector "strong"]) "\n  font-weight: bolder;\n",
-                Comment " another\n   comment ",
-                Query
+            CSS.AST
+              [ CSS.Comment " a comment ",
+                CSS.RuleGroup (CSS.GenericSelector "body" :| []) "\n  margin: 0;\n",
+                CSS.RuleGroup (CSS.GenericSelector "b" :| [CSS.GenericSelector "strong"]) "\n  font-weight: bolder;\n",
+                CSS.Comment " another\n   comment ",
+                CSS.Query
                   "keyframes"
                   "spin"
-                  [RuleGroup (GenericSelector "to" :| []) "\n    transform: rotate(360deg);\n  "],
-                MediaQuery
+                  [CSS.RuleGroup (CSS.GenericSelector "to" :| []) "\n    transform: rotate(360deg);\n  "],
+                CSS.MediaQuery
                   "(min-width: 640px)"
-                  [ RuleGroup
-                      (ClassSelector "sm\\:container" Nothing :| [])
+                  [ CSS.RuleGroup
+                      (CSS.ClassSelector "sm\\:container" Nothing :| [])
                       "\n    width: 100%;\n  "
                   ],
-                RuleGroup (ClassSelector "-mx-3\\.5" Nothing :| []) "\n  margin-left: -0.875rem;\n  margin-right: -0.875rem;\n",
-                RuleGroup (ClassSelector "mt-0" Nothing :| []) "\n  margin-top: 0px;\n",
-                MediaQuery
+                CSS.RuleGroup (CSS.ClassSelector "-mx-3\\.5" Nothing :| []) "\n  margin-left: -0.875rem;\n  margin-right: -0.875rem;\n",
+                CSS.RuleGroup (CSS.ClassSelector "mt-0" Nothing :| []) "\n  margin-top: 0px;\n",
+                CSS.MediaQuery
                   "(min-width: 1536px)"
-                  [ MediaQuery "(min-width: 640px)" [RuleGroup (ClassSelector "\\32xl\\:container" Nothing :| []) "\n      display: flex;\n    "],
-                    RuleGroup (ClassSelector "\\32xl\\:space-y-0" (Just " > :not([hidden]) ~ :not([hidden])") :| []) "\n    display: flex;\n  "
+                  [ CSS.MediaQuery "(min-width: 640px)" [CSS.RuleGroup (CSS.ClassSelector "\\32xl\\:container" Nothing :| []) "\n      display: flex;\n    "],
+                    CSS.RuleGroup (CSS.ClassSelector "\\32xl\\:space-y-0" (Just " > :not([hidden]) ~ :not([hidden])") :| []) "\n    display: flex;\n  "
                   ]
               ]
-      P.parse cssFile "cssFile" input === Right expected
+      P.parse CSS.cssFile "cssFile" input === Right expected
 
-  describe "ruleGroup & renderNode" $
-    it "node == (parse ruleGroup . renderNode) node" $ do
+  describe "CSS.ruleGroup & render @CSSNode" $
+    it "node == (parse CSS.ruleGroup . render) node" $ do
       let body = "\n  display: flex;  margin-bottom: 10px;\n"
           selectors =
-            [ ClassSelector "some-class" Nothing :| [],
-              ClassSelector "some-class" (Just ":hover") :| [],
-              ClassSelector "some-class" (Just ":focus") :| [ClassSelector "another-class" Nothing],
-              ClassSelector "bottom-1/2" Nothing :| [],
-              ClassSelector "focus\\:-rotate-12" Nothing :| [],
-              ClassSelector "bottom-0\\.5" Nothing :| [],
-              ClassSelector "lg\\:hover\\:translate-y-1" Nothing :| [],
-              ClassSelector "lg\\:hover\\:translate-y-1" Nothing :| [ClassSelector "lg\\:hover\\:translate-y-1" Nothing]
+            [ CSS.ClassSelector "some-class" Nothing :| [],
+              CSS.ClassSelector "some-class" (Just ":hover") :| [],
+              CSS.ClassSelector "some-class" (Just ":focus") :| [CSS.ClassSelector "another-class" Nothing],
+              CSS.ClassSelector "bottom-1/2" Nothing :| [],
+              CSS.ClassSelector "focus\\:-rotate-12" Nothing :| [],
+              CSS.ClassSelector "bottom-0\\.5" Nothing :| [],
+              CSS.ClassSelector "lg\\:hover\\:translate-y-1" Nothing :| [],
+              CSS.ClassSelector "lg\\:hover\\:translate-y-1" Nothing :| [CSS.ClassSelector "lg\\:hover\\:translate-y-1" Nothing]
             ]
-          groups = fmap (flip RuleGroup body) selectors
-          actual = fmap (P.parse ruleGroup "ruleGroup_renderNode" . T.pack . renderNode) groups
+          groups = fmap (flip CSS.RuleGroup body) selectors
+          actual = fmap (P.parse CSS.ruleGroup "ruleGroup_render" . T.pack . render) groups
           expected = fmap Right groups
       mapM_ (uncurry shouldBe) $ zip actual expected
