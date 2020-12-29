@@ -51,7 +51,7 @@ main = hspec $ do
       cssToPursName "focus:-rotate-12" === "focusNegRotate12"
       cssToPursName "lg:-bottom-0.5" === "lgNegBottom0p5"
 
-  describe "PureScript.tailwindClassNames" $
+  describe "PureScript.usedTailwindClassNames" $
     it "extracts Tailwind classes from PureScript code" $ do
       let input =
             toText
@@ -71,7 +71,7 @@ main = hspec $ do
                 "    , HH.p [ HP.classes [ T.flex, T.flexCol ] ] [ HH.text user.name ]",
                 "    ]"
               ]
-          actual = PS.tailwindClassNames "PureScript.tailwindClassNames" input
+          actual = PS.usedTailwindClassNames "PureScript.usedTailwindClassNames" input
           expected = Right ["minHScreen", "bgGray200", "container", "flex", "flexCol"]
       actual === expected
 
