@@ -9,7 +9,6 @@ import Control.Applicative (Applicative (liftA2))
 import qualified Control.Concurrent.STM as STM
 import Control.Monad (join, unless, when, (<=<))
 import qualified Data.Bifunctor as BiF
-import Data.Char (isNumber)
 import Data.Default (def)
 import qualified Data.Either as Either
 import Data.Foldable (Foldable (fold))
@@ -28,12 +27,14 @@ import qualified PureScript as PS
 import qualified System.Directory as Dir
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
-import Text.Casing (camel)
 import Text.Parsec.Text (parseFromFile)
 import Text.Render
 import Twitch ((|-), (|>))
 import qualified Twitch
-import Util
+import qualified Data.Text.IO as TIO
+import Html
+import System.IO (stderr)
+import System.Exit (die)
 
 newtype FileName = FileName FilePath
   deriving (Show, Eq, Ord)
@@ -258,25 +259,11 @@ nodeClasses (CSS.RuleGroup selectors _) = Maybe.mapMaybe className $ NE.toList s
 nodeClasses (CSS.MediaQuery _ nodes) = nodeClasses =<< nodes
 nodeClasses _ = []
 
-cssToPursName :: String -> String
-cssToPursName =
-  num
-    . camel
-    . neg
-    . filter (/= '\\')
-    . replace '/' 'd'
-    . replace ':' '-'
-    . replace '.' 'p'
-    . List.replace ":-" "-neg-"
-  where
-    neg s = if startsWith (== '-') s then "neg-" ++ s else s
-    num s = if startsWith isNumber s then '_' : s else s
-
 escapeCssName :: String -> String
 escapeCssName = filter (/= '\\')
 
 pursifyCssClass :: String -> CssClass
-pursifyCssClass = CssClass <$> cssToPursName <*> escapeCssName
+pursifyCssClass = CssClass <$> PS.cssToPursName <*> escapeCssName
 
 pursAndCss :: CssClass -> String
 pursAndCss cx = classPursName cx <> ";" <> classCssName cx
@@ -299,11 +286,20 @@ generateAvailableClasses config = do
       putStrLn $ "List of all the available classes written to " <> genOut config
     Left err -> putStrLn err
 
-html2purs :: HtmlToPursOptions -> String
-html2purs (HtmlToPursOptions cs False) =
-  "[ " <> (intercalate "\n, " . map (("T." <>) . cssToPursName)) cs <> "\n]"
-html2purs (HtmlToPursOptions cs True) =
-  "[ " <> (intercalate ", " . map (("T." <>) . cssToPursName)) cs <> " ]"
+classesToPurs :: ClassNamesOptions -> String
+classesToPurs (ClassNamesOptions cs False) =
+  "[ " <> (intercalate "\n, " . map (("T." <>) . PS.cssToPursName)) cs <> "\n]"
+classesToPurs (ClassNamesOptions cs True) =
+  "[ " <> (intercalate ", " . map (("T." <>) . PS.cssToPursName)) cs <> " ]"
+
+html2Purs :: IO ()
+html2Purs = do
+  mbDoc <- htmlToHalogen <$> TIO.getContents
+  case mbDoc of
+    Right doc -> do
+      TIO.putStrLn doc
+      TIO.hPutStrLn stderr "Parsed HTML and printed as Halogen HTML succesfully"
+    Left _ -> die ""
 
 run :: IO ()
 run = do
@@ -312,4 +308,5 @@ run = do
     GenAvaiableClasses opts -> generateAvailableClasses =<< normaliseGenAvailableClassesConfig opts
     PursClasses opts -> generatePursClasses =<< normalisePursClassesConfig opts
     CleanCss opts -> generateOptimizedCSS =<< normaliseCleanCssConfig opts
-    HtmlToPurs opts -> putStrLn $ html2purs opts
+    ClassNamesCmd opts -> putStrLn $ classesToPurs opts
+    HtmlToHalogen -> html2Purs

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 21d03e2c927dc7653208328d38c9e0fe059507efe2a417a3431d9da31e49dc94
+-- hash: b9f78c045d2d6d7a8a1d4cc4ee6e90a8c6171ea5b36067774b203b6f92905bee
 
 name:           tailwind-purs
 version:        0.0.1.0
@@ -29,6 +29,7 @@ library
       AvailableClasses
       CLI
       CSS
+      Html
       Lib
       PureScript
       Text.Render
@@ -45,10 +46,13 @@ library
     , data-default
     , directory
     , filepath
+    , html-parse
+    , mtl
     , optparse-applicative
     , parsec
     , stm
     , text
+    , transformers
     , twitch
   default-language: Haskell2010
 
@@ -67,11 +71,14 @@ executable twpurs
     , data-default
     , directory
     , filepath
+    , html-parse
+    , mtl
     , optparse-applicative
     , parsec
     , stm
     , tailwind-purs
     , text
+    , transformers
     , twitch
   default-language: Haskell2010
 
@@ -92,10 +99,13 @@ test-suite tailwind-purs-test
     , directory
     , filepath
     , hspec
+    , html-parse
+    , mtl
     , optparse-applicative
     , parsec
     , stm
     , tailwind-purs
     , text
+    , transformers
     , twitch
   default-language: Haskell2010

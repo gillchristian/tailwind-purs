@@ -13,16 +13,19 @@ description:         Please see the README on GitHub at <https://github.com/gill
 
 dependencies:
 - base >= 4.7 && < 5
-- MissingH
 - casing
 - containers
 - data-default
 - directory
 - filepath
+- html-parse
+- MissingH
+- mtl
 - optparse-applicative
 - parsec
 - stm
 - text
+- transformers
 - twitch
 
 library:
