@@ -4,13 +4,17 @@ module PureScript where
 
 import AvailableClasses
 import qualified Data.Bifunctor as BiF
+import Data.Char (isNumber)
 import qualified Data.Maybe as Maybe
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Text.Casing (camel)
 import Text.Parsec ((<|>))
 import qualified Text.Parsec as P
 import Text.Parsec.Text (Parser)
 import Text.Render
+import qualified Data.String.Utils as List
+import Util
 
 data AST
   = TailwindClass String
@@ -48,3 +52,17 @@ tailwindModule usedClasses =
     ]
   where
     classes = Text.intercalate "\n" $ map (Text.pack . render) usedClasses
+
+cssToPursName :: String -> String
+cssToPursName =
+  num
+    . camel
+    . neg
+    . filter (/= '\\')
+    . replace '/' 'd'
+    . replace ':' '-'
+    . replace '.' 'p'
+    . List.replace ":-" "-neg-"
+  where
+    neg s = if startsWith (== '-') s then "neg-" ++ s else s
+    num s = if startsWith isNumber s then '_' : s else s

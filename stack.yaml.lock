@@ -11,6 +11,13 @@ packages:
       sha256: 7e4db8b9ef3e634e68d68155901a7c3affb873b3cf9a9dca4dcc0ebb4b6eb527
   original:
     hackage: twitch-0.1.7.2@sha256:146a887da4d2d21e489ff823a6058add40c1f9c5ee8e0d00356b497092c9c624,2988
+- completed:
+    hackage: html-parse-0.2.0.2@sha256:268c6c3a723aae77ff799bf501d60a91e60536facab3ae70df7a74cea75e29c3,3898
+    pantry-tree:
+      size: 516
+      sha256: c5c294ecfbe759becf84a555c578995788c98a5b3944066b167bea8b143efb1e
+  original:
+    hackage: html-parse-0.2.0.2@sha256:268c6c3a723aae77ff799bf501d60a91e60536facab3ae70df7a74cea75e29c3,3898
 snapshots:
 - completed:
     size: 532832
