@@ -7,7 +7,7 @@ import CLI
 import qualified CSS
 import Control.Applicative (Applicative (liftA2))
 import qualified Control.Concurrent.STM as STM
-import Control.Monad (join, unless, when)
+import Control.Monad (join, unless, when, (<=<))
 import qualified Data.Bifunctor as BiF
 import Data.Char (isNumber)
 import Data.Default (def)
@@ -288,8 +288,7 @@ cssToAvailableClasses =
     . fmap (pursAndCss . pursifyCssClass)
     . Set.toList
     . Set.fromList
-    . (nodeClasses =<<)
-    . CSS.unAst
+    . (nodeClasses <=< CSS.unAst)
 
 generateAvailableClasses :: GenAvaiableClassesOptions -> IO ()
 generateAvailableClasses config = do
@@ -300,6 +299,12 @@ generateAvailableClasses config = do
       putStrLn $ "List of all the available classes written to " <> genOut config
     Left err -> putStrLn err
 
+html2purs :: HtmlToPursOptions -> String
+html2purs (HtmlToPursOptions cs False) =
+  "[ " <> (intercalate "\n, " . map (("T." <>) . cssToPursName)) cs <> "\n]"
+html2purs (HtmlToPursOptions cs True) =
+  "[ " <> (intercalate ", " . map (("T." <>) . cssToPursName)) cs <> " ]"
+
 run :: IO ()
 run = do
   cmd <- uncommand <$> Opt.execParser opts
@@ -307,3 +312,4 @@ run = do
     GenAvaiableClasses opts -> generateAvailableClasses =<< normaliseGenAvailableClassesConfig opts
     PursClasses opts -> generatePursClasses =<< normalisePursClassesConfig opts
     CleanCss opts -> generateOptimizedCSS =<< normaliseCleanCssConfig opts
+    HtmlToPurs opts -> putStrLn $ html2purs opts

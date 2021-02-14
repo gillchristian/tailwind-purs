@@ -146,10 +146,30 @@ genOpts = GenAvaiableClasses <$> Opt.info opts (Opt.progDesc desc)
               <> Opt.showDefault
           )
 
+data HtmlToPursOptions = HtmlToPursOptions
+  { htmlArgs :: [String],
+    htmlSingleLine :: Bool
+  }
+  deriving (Eq, Show)
+
+htmlOpts :: Opt.ParserInfo Command
+htmlOpts = HtmlToPurs <$> Opt.info opts (Opt.progDesc desc)
+  where
+    desc = "Parse a list of CSS classes (from the HTML class attribute: `<div class=\"foo bar baz\">`) and produce the Halogen PureScript version `[ T.foo, T.bar, T.baz ]`"
+    opts =
+      HtmlToPursOptions
+        <$> Opt.many (Opt.strArgument $ Opt.metavar "class")
+        <*> Opt.switch
+          ( Opt.long "single-line"
+              <> Opt.short 's'
+              <> Opt.help "Output in single line"
+          )
+
 data Command
   = PursClasses PursClassesOptions
   | CleanCss CleanCssOptions
   | GenAvaiableClasses GenAvaiableClassesOptions
+  | HtmlToPurs HtmlToPursOptions
   deriving (Eq, Show)
 
 newtype Options = Options {uncommand :: Command}
@@ -161,10 +181,11 @@ opts =
     (programm <**> Opt.helper)
     (Opt.fullDesc <> Opt.header "Do some Tailwind stuff")
   where
-    programm = Options <$> Opt.hsubparser (gen <> purs <> css)
+    programm = Options <$> Opt.hsubparser (gen <> purs <> css <> html)
     gen = Opt.command "gen-available-classes" genOpts
     purs = Opt.command "gen-purs" pursOpts
     css = Opt.command "gen-css" cssOpts
+    html = Opt.command "html2purs" htmlOpts
 
 mkDefaultGenAvailableClassesConfig :: FilePath -> GenAvaiableClassesOptions
 mkDefaultGenAvailableClassesConfig root =
