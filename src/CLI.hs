@@ -155,7 +155,7 @@ data ClassNamesOptions = ClassNamesOptions
 classNamesOpts :: Opt.ParserInfo Command
 classNamesOpts = ClassNamesCmd <$> Opt.info opts (Opt.progDesc desc)
   where
-    desc = "Parse a list of CSS classes (from the HTML class attribute:\n    `<div class=\"foo bar baz\">`) and produce the Halogen PureScript version\n    `[ T.foo, T.bar, T.baz ]`"
+    desc = "Parse a list of CSS classes (from the HTML class attribute: `<div class=\"foo bar baz\">`) and produce the Halogen PureScript version `[ T.foo, T.bar, T.baz ]`"
     opts =
       ClassNamesOptions
         <$> Opt.many (Opt.strArgument $ Opt.metavar "class")
