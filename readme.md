@@ -16,20 +16,11 @@ This will install the `twpurs` command.
 
 ### Usage
 
-There are 3 commands.
-
-- `gen-available-classes`: generates a file with the list of available Tailwind
-  classes. This file is used as the input to the other commands. The input
-  should be the CSS file with all the generated Tailwind styles.
-- `gen-purs`: looks for all the `T.className` ocurrences and generates a
-  PureScript file containing only those as Halogen `ClassName`s.To generate all
-  the available ones instead use the `--all` flag. This command is ment both for
-  development to generate all the available classes but also can be run to work
-  with only the used ones, which reduces compile times a lot.
-- `gen-css`: looks for all the `T.className` ocurrences and generates an
-  optimized version of the `tailwind.css` file.
-
 **gen-available-classes**
+
+Generates a file with the list of available Tailwind classes. This file is used
+as the input to the other commands. The input should be the CSS file with all
+the generated Tailwind styles.
 
 ```
 $ twpurs gen-available-classes --help
@@ -45,6 +36,12 @@ Available options:
 ```
 
 **gen-purs**
+
+Looks for all the `T.className` ocurrences and generates a  PureScript file
+containing only those as Halogen `ClassName`s.To generate all the available ones
+instead use the `--all` flag. This command is ment both for development to
+generate all the available classes but also can be run to work with only the
+used ones, which reduces compile times a lot.
 
 ```
 $ twpurs gen-purs --help
@@ -66,6 +63,9 @@ Available options:
 
 **gen-css**
 
+Looks for all the `T.className` ocurrences and generates an optimized version of
+the `tailwind.css` file.
+
 ```
 $ twpurs gen-css --help
 Usage: twpurs gen-css [ROOT] [--src SRC] [--classes CLASSES] [--css CSS]
@@ -83,6 +83,50 @@ Available options:
                            CSS (default: "wip/tailwind.css")
   -o,--out OUT             Output file. This should be the production CSS
                            file (default: "dist/tailwind.css")
+  -h,--help                Show this help text
+```
+
+**html2purs**
+
+Parse HTML and produce the Halogen HTML version, takes care of formatting the
+classes as Tailwind ones. It does not pretty format the generated PureScript
+code. You can use [purty](https://gitlab.com/joneshf/purty) for that.
+
+```
+$ twpurs html2purs --help
+Usage: twpurs html2purs 
+  Pars HTML (from STDIN) into Halogen HTML
+
+Available options:
+  -h,--help                Show this help text
+```
+
+Here's a bash function I use to do the formatting with `purty`.It expects the
+HTML to be on the clipboard. Purty only formats valid PureScript modules, so the
+function takes care of that. 
+
+```bash
+function html2purs {
+  # On Mac use `pbpaste` instead
+  # local out="$(pbpaste | twpurs html2purs | awk '{print "  " $0}')"
+  local out="$(xclip -o -sel clip | twpurs html2purs | awk '{print "  " $0}')"
+  echo "module Temp where\n\ntmp =\n$out" |  purty - | tail -n +4 | sed 's/^  //'
+}
+```
+
+**classnames**
+
+Transform a list of Tailwind classes into the PureScript version.
+
+```
+$ twpurs classnames --help
+Usage: twpurs classnames [class] [-s|--single-line]
+  Parse a list of CSS classes (from the HTML class attribute: `<div class="foo
+  bar baz">`) and produce the Halogen PureScript version `[ T.foo, T.bar, T.baz
+  ]`
+
+Available options:
+  -s,--single-line         Output in single line
   -h,--help                Show this help text
 ```
 
