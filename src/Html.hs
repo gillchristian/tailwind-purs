@@ -51,8 +51,9 @@ printTree :: Tree Token -> Maybe Text
 printTree (Node (Comment _) _) = Nothing
 printTree (Node (Doctype _) _) = Nothing
 printTree (Node (ContentText content) _) = textNode content
-printTree (Node (ContentChar content) _) = Just $ "HH.text \"" <> Text.singleton content <> "\""
+printTree (Node (ContentChar content) _) = textNode $ Text.singleton content
 printTree (Node (TagClose _) _) = Nothing
+printTree (Node (TagOpen "textarea" []) []) = Just "HH.textarea []"
 printTree (Node (TagOpen name []) []) = Just $ "HH." <> name <> " [] []"
 printTree (Node (TagOpen name []) [Node (ContentText content) _]) =
   Just $
@@ -70,6 +71,12 @@ printTree (Node (TagOpen name []) rest) =
         emptyBrackets,
         openBracket <> printChildren rest,
         closeBracket
+      ]
+printTree (Node (TagOpen "textarea" attrs) []) =
+  Just $
+    unlines
+      [ tagName "textarea",
+        printAttrList attrs
       ]
 printTree (Node (TagOpen name attrs) []) =
   Just $
