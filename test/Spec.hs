@@ -26,30 +26,30 @@ main = hspec $ do
 
   describe "cssToPursName" $ do
     it "camelcases" $ do
-      cssToPursName "foo-bar-baz" === "fooBarBaz"
-      cssToPursName "bottom:hover" === "bottomHover"
-      cssToPursName "xl:w-9/12" === "xlW9d12"
+      PS.cssToPursName "foo-bar-baz" === "fooBarBaz"
+      PS.cssToPursName "bottom:hover" === "bottomHover"
+      PS.cssToPursName "xl:w-9/12" === "xlW9d12"
 
     it "prefixes with '_' when starting numbers" $ do
-      cssToPursName "32xl" === "_32xl"
-      cssToPursName "55-random" === "_55Random"
-      cssToPursName "55random" === "_55random"
+      PS.cssToPursName "32xl" === "_32xl"
+      PS.cssToPursName "55-random" === "_55Random"
+      PS.cssToPursName "55random" === "_55random"
 
     it "replaces '/' with 'd'" $ do
-      cssToPursName "bottom-1/2" === "bottom1d2"
-      cssToPursName "xl:w-9/12" === "xlW9d12"
+      PS.cssToPursName "bottom-1/2" === "bottom1d2"
+      PS.cssToPursName "xl:w-9/12" === "xlW9d12"
 
     it "replaces '.' with 'p'" $ do
-      cssToPursName "bottom-0.5" === "bottom0p5"
-      cssToPursName "xl:w-3.5" === "xlW3p5"
+      PS.cssToPursName "bottom-0.5" === "bottom0p5"
+      PS.cssToPursName "xl:w-3.5" === "xlW3p5"
 
     it "replaces prefix '-' with 'neg'" $ do
-      cssToPursName "-32xl" === "neg32xl"
-      cssToPursName "-bottom-0.5" === "negBottom0p5"
+      PS.cssToPursName "-32xl" === "neg32xl"
+      PS.cssToPursName "-bottom-0.5" === "negBottom0p5"
 
     it "replaces ':-' with 'Neg'" $ do
-      cssToPursName "focus:-rotate-12" === "focusNegRotate12"
-      cssToPursName "lg:-bottom-0.5" === "lgNegBottom0p5"
+      PS.cssToPursName "focus:-rotate-12" === "focusNegRotate12"
+      PS.cssToPursName "lg:-bottom-0.5" === "lgNegBottom0p5"
 
   describe "PureScript.usedTailwindClassNames" $
     it "extracts Tailwind classes from PureScript code" $ do
