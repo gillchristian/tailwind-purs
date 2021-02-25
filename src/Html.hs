@@ -15,6 +15,7 @@ import PureScript
 import Text.Casing (pascal)
 import qualified Text.HTML.Parser as HTML
 import qualified Text.HTML.Tree as HTML
+import Util
 import Prelude hiding (unlines)
 
 newtype AttrName = AttrName Text
@@ -105,12 +106,12 @@ printChildren =
 mkClassName :: Text -> Text
 mkClassName = ("T." <>) . Text.pack . cssToPursName . Text.unpack
 
-printAttr :: HtmlElem -> Attr -> Maybe Text
+printAttr :: HtmlElem -> Attr -> Text
 printAttr (HtmlElem "button") (Attr (AttrName "type") (AttrValue type_)) =
-  Just $ ("HP.type_ HP.Button" <>) . Text.pack . pascal . Text.unpack $ type_
+  ("HP.type_ HP.Button" <>) . Text.pack . pascal . Text.unpack $ type_
 printAttr (HtmlElem "input") (Attr (AttrName "type") (AttrValue type_)) =
-  Just $ ("HP.type_ HP.Input" <>) . Text.pack . pascal . Text.unpack $ type_
-printAttr _ (Attr (AttrName "class") (AttrValue value)) = Just $ "HP.classes [ " <> classList' <> " ]"
+  ("HP.type_ HP.Input" <>) . Text.pack . pascal . Text.unpack $ type_
+printAttr _ (Attr (AttrName "class") (AttrValue value)) = "HP.classes [ " <> classList' <> " ]"
   where
     cs = Text.words value
     classList = Text.intercalate ", " $ mkClassName <$> cs
@@ -118,24 +119,24 @@ printAttr _ (Attr (AttrName "class") (AttrValue value)) = Just $ "HP.classes [ "
       if length cs > 5 || Text.length classList > 80
         then Text.intercalate ("\n" <> indent 1 ", ") $ mkClassName <$> Text.words value
         else classList
-printAttr _ (Attr (AttrName "role") (AttrValue value)) = Just $ "HPA.role \"" <> value <> "\""
-printAttr _ (Attr (AttrName "id") (AttrValue value)) = Just $ "HP.id_ \"" <> value <> "\""
-printAttr _ (Attr (AttrName "autocomplete") (AttrValue "")) = Just "HP.autocomplete false"
-printAttr _ (Attr (AttrName "autocomplete") _) = Just "HP.autocomplete true"
-printAttr _ (Attr (AttrName "method") _) = Nothing
-printAttr _ (Attr (AttrName "action") _) = Nothing
-printAttr _ (Attr (AttrName name) (AttrValue value)) = Just $ "HP." <> name <> " \"" <> value <> "\""
+printAttr _ (Attr (AttrName "role") (AttrValue value)) = "HPA.role \"" <> value <> "\""
+printAttr _ (Attr (AttrName "id") (AttrValue value)) = "HP.id_ \"" <> value <> "\""
+printAttr _ (Attr (AttrName "autocomplete") (AttrValue "")) = "HP.autocomplete false"
+printAttr _ (Attr (AttrName "autocomplete") _) = "HP.autocomplete true"
+printAttr _ (Attr (AttrName name) (AttrValue value)) = "HP." <> name <> " \"" <> value <> "\""
 
-isIgnoredAttr :: Attr -> Bool
-isIgnoredAttr (Attr (AttrName name) _) | "data-" `Text.isPrefixOf` name = True
-isIgnoredAttr (Attr (AttrName name) _) | "aria-" `Text.isPrefixOf` name = True
-isIgnoredAttr _ = False
+isIgnoredAttrName :: Text -> Bool
+isIgnoredAttrName =
+  (== "method") <||> (== "action") <||> Text.isPrefixOf "data-" <||> Text.isPrefixOf "data-"
+
+attrName :: Attr -> Text
+attrName (Attr (AttrName name) _) = name
 
 printAttrList :: HtmlElem -> [Attr] -> Text
 printAttrList elem attrs =
-  openBracket <> Text.intercalate divider (mapMaybe (printAttr elem) attrs') <> closeBracket
+  openBracket <> Text.intercalate divider (printAttr elem <$> attrs') <> closeBracket
   where
-    attrs' = filter (not . isIgnoredAttr) attrs
+    attrs' = filter (not . isIgnoredAttrName . attrName) attrs
     divider = if length attrs' > 2 then "\n" <> indent 1 ", " else ", "
 
 attr2attr :: HTML.Attr -> Attr
