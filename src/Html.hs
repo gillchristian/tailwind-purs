@@ -5,31 +5,41 @@ module Html where
 import Data.Bifunctor (Bifunctor (bimap))
 import Data.Function ((&))
 import Data.List (dropWhileEnd)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Internal.Builder (toLazyText)
 import Data.Text.Lazy (toStrict)
 import Data.Tree (Forest, Tree (Node))
 import PureScript
+import Text.Casing (pascal)
 import qualified Text.HTML.Parser as HTML
 import qualified Text.HTML.Tree as HTML
 import Prelude hiding (unlines)
 
+newtype AttrName = AttrName Text
+  deriving (Eq, Ord, Show)
+
+newtype AttrValue = AttrValue Text
+  deriving (Eq, Ord, Show)
+
+data Attr = Attr AttrName AttrValue
+  deriving (Eq, Ord, Show)
+
+newtype HtmlElem = HtmlElem Text
+  deriving (Eq, Ord, Show)
+
+type Comment = Maybe Text
+
+data HtmlAst
+  = HtmlNode HtmlElem Comment [Attr] [HtmlAst]
+  | HtmlLeaf HtmlElem Comment [Attr]
+  | HtmlText Comment Text
+  | HtmlEmpty Comment
+  deriving (Eq, Ord, Show)
+
 indent :: Int -> Text -> Text
 indent n content = Text.replicate (n * 2) " " <> content
-
-type Doc = Forest HTML.Token
-
-printDoc :: Doc -> Text
-printDoc = unlines . mapMaybe printTree
-
-printChildren :: Doc -> Text
-printChildren =
-  Text.intercalate ("\n" <> indent 1 ", ") . mapMaybe printTree
-
-tagName :: Text -> Text
-tagName name = "HH." <> name
 
 emptyBrackets :: Text
 emptyBrackets = indent 1 "[]"
@@ -48,124 +58,100 @@ fromPredicate pred a
   | pred a = Just a
   | otherwise = Nothing
 
-printTree :: Tree HTML.Token -> Maybe Text
-printTree (Node (HTML.Comment comment) _) =
+printComment :: Text -> Maybe Text
+printComment comment =
   fromPredicate (not . Text.null . Text.strip) comment'
   where
     comment' =
-      toLazyText comment
-        & toStrict
-        & Text.lines
+      Text.lines comment
         & dropWhile (Text.null . Text.strip)
         & dropWhileEnd (Text.null . Text.strip)
-        & fmap (indent 1 "--" <>)
+        & fmap (indent 1 "-- " <>)
         & Text.unlines
-printTree (Node (HTML.Doctype _) _) = Nothing
-printTree (Node (HTML.ContentText content) _) = textNode content
-printTree (Node (HTML.ContentChar content) _) = textNode (Text.singleton content)
-printTree (Node (HTML.TagClose _) _) = Nothing
-printTree (Node (HTML.TagOpen "textarea" []) []) = Just "HH.textarea []"
-printTree (Node (HTML.TagOpen name []) []) = Just $ "HH." <> name <> " [] []"
-printTree (Node (HTML.TagOpen name []) [Node (HTML.ContentText content) _]) =
-  Just $
-    unlines
-      [ tagName name,
-        emptyBrackets,
-        case textNode content of
-          Just txt -> openBracket <> txt <> " ]"
-          Nothing -> emptyBrackets
-      ]
-printTree (Node (HTML.TagOpen name []) rest) =
-  Just $
-    unlines
-      [ tagName name,
-        emptyBrackets,
-        openBracket <> printChildren rest,
-        closeBracket
-      ]
-printTree (Node (HTML.TagOpen "textarea" attrs) []) =
-  Just $
-    unlines
-      [ tagName "textarea",
-        printAttrList attrs
-      ]
-printTree (Node (HTML.TagOpen name attrs) []) =
-  Just $
-    unlines
-      [ tagName name,
-        printAttrList attrs,
-        emptyBrackets
-      ]
-printTree (Node (HTML.TagOpen name attrs) [Node (HTML.ContentText content) _]) =
-  Just $
-    unlines
-      [ tagName name,
-        printAttrList attrs,
-        case textNode content of
-          Just txt -> openBracket <> txt <> closeBracket
-          Nothing -> emptyBrackets
-      ]
-printTree (Node (HTML.TagOpen name attrs) rest) =
-  Just $
-    unlines
-      [ tagName name,
-        printAttrList attrs,
-        openBracket <> printChildren rest,
-        closeBracket
-      ]
-printTree (Node (HTML.TagSelfClose name []) _) = Just $ "HH." <> name <> " []"
-printTree (Node (HTML.TagSelfClose name attrs) _) =
-  Just $
-    unlines
-      [ tagName name,
-        printAttrList attrs
-      ]
 
-printAttrList :: [HTML.Attr] -> Text
-printAttrList attrs =
-  openBracket <> Text.intercalate divider (mapMaybe printAttr attrs') <> closeBracket
-  where
-    attrs' = filter (not . isIgnoredAttr) attrs
-    divider = if length attrs' > 2 then "\n" <> indent 1 ", " else ", "
+elemName :: HtmlElem -> Text
+elemName (HtmlElem name) = "HH." <> name
 
-isIgnoredAttr :: HTML.Attr -> Bool
-isIgnoredAttr (HTML.Attr name _) | "data-" `Text.isPrefixOf` name = True
-isIgnoredAttr (HTML.Attr name _) | "aria-" `Text.isPrefixOf` name = True
-isIgnoredAttr _ = False
+mbUnline :: [Maybe Text] -> Maybe Text
+mbUnline = Just . unlines . catMaybes
 
-textNode :: Text -> Maybe Text
-textNode content | Text.null $ Text.strip content = Nothing
-textNode content = Just $ "HH.text \"" <> Text.strip content <> "\""
+printTree :: HtmlAst -> Maybe Text
+printTree (HtmlEmpty comment) = comment >>= printComment
+printTree (HtmlText comment txt) | Text.null $ Text.strip txt = comment >>= printComment
+printTree (HtmlText comment txt) =
+  mbUnline
+    [ comment >>= printComment,
+      -- TODO: handle multiline text
+      Just $ "HH.text \"" <> Text.strip txt <> "\""
+    ]
+printTree (HtmlLeaf elem comment []) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem <> emptyBrackets
+    ]
+printTree (HtmlLeaf elem comment attrs) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem,
+      Just $ printAttrList elem attrs
+    ]
+printTree (HtmlNode elem comment [] []) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem <> emptyBrackets <> emptyBrackets
+    ]
+printTree (HtmlNode elem comment attrs []) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem,
+      Just $ printAttrList elem attrs,
+      Just emptyBrackets
+    ]
+printTree (HtmlNode elem comment [] [child@(HtmlText _ _)]) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ case printTree child of
+        Just childTxt ->
+          elemName elem <> emptyBrackets <> openBracket <> childTxt <> closeBracket
+        Nothing -> elemName elem <> emptyBrackets <> emptyBrackets
+    ]
+printTree (HtmlNode elem comment [] children) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem,
+      Just emptyBrackets,
+      Just $ openBracket <> printChildren children,
+      Just closeBracket
+    ]
+printTree (HtmlNode elem comment attrs [child@(HtmlText _ _)]) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem,
+      Just $ printAttrList elem attrs,
+      Just $ maybe emptyBrackets (\childTxt -> openBracket <> childTxt <> closeBracket) (printTree child)
+    ]
+printTree (HtmlNode elem comment attrs children) =
+  mbUnline
+    [ comment >>= printComment,
+      Just $ elemName elem,
+      Just $ printAttrList elem attrs,
+      Just $ openBracket <> printChildren children,
+      Just closeBracket
+    ]
+
+printChildren :: [HtmlAst] -> Text
+printChildren =
+  Text.intercalate ("\n" <> indent 1 ", ") . mapMaybe printTree
 
 mkClassName :: Text -> Text
 mkClassName = ("T." <>) . Text.pack . cssToPursName . Text.unpack
 
-printAttr :: HTML.Attr -> Maybe Text
--- type button
-printAttr (HTML.Attr "type" "button") = Just "HP.type_ HP.ButtonButton"
-printAttr (HTML.Attr "type" "reset") = Just "HP.type_ HP.ButtonRest"
-printAttr (HTML.Attr "type" "submit") = Just "HP.type_ HP.ButtonSubmit"
--- type input
-printAttr (HTML.Attr "type" "text") = Just "HP.type_ HP.InptuText"
-printAttr (HTML.Attr "type" "password") = Just "HP.type_ HP.InptuPassword"
-printAttr (HTML.Attr "type" "email") = Just "HP.type_ HP.InptuEmail"
-printAttr (HTML.Attr "type" "number") = Just "HP.type_ HP.InptuNumber"
-printAttr (HTML.Attr "type" "checkbox") = Just "HP.type_ HP.InptuCheckbox"
-printAttr (HTML.Attr "type" "radio") = Just "HP.type_ HP.InptuRadio"
-printAttr (HTML.Attr "type" "file") = Just "HP.type_ HP.InptuFile"
-printAttr (HTML.Attr "type" "color") = Just "HP.type_ HP.InputColor"
-printAttr (HTML.Attr "type" "date") = Just "HP.type_ HP.InputDate"
-printAttr (HTML.Attr "type" "hidden") = Just "HP.type_ HP.InputHidden"
-printAttr (HTML.Attr "type" "image") = Just "HP.type_ HP.InputImage"
-printAttr (HTML.Attr "type" "month") = Just "HP.type_ HP.InputMonth"
-printAttr (HTML.Attr "type" "range") = Just "HP.type_ HP.InputRange"
-printAttr (HTML.Attr "type" "search") = Just "HP.type_ HP.InputSearch"
-printAttr (HTML.Attr "type" "tel") = Just "HP.type_ HP.InputTel"
-printAttr (HTML.Attr "type" "time") = Just "HP.type_ HP.InputTime"
-printAttr (HTML.Attr "type" "Url") = Just "HP.type_ HP.InputUrl"
-printAttr (HTML.Attr "type" "week") = Just "HP.type_ HP.InputWeek"
--- others
-printAttr (HTML.Attr "class" value) = Just $ "HP.classes [ " <> classList' <> " ]"
+printAttr :: HtmlElem -> Attr -> Maybe Text
+printAttr (HtmlElem "button") (Attr (AttrName "type") (AttrValue type_)) =
+  Just $ ("HP.type_ HP.Button" <>) . Text.pack . pascal . Text.unpack $ type_
+printAttr (HtmlElem "input") (Attr (AttrName "type") (AttrValue type_)) =
+  Just $ ("HP.type_ HP.Input" <>) . Text.pack . pascal . Text.unpack $ type_
+printAttr _ (Attr (AttrName "class") (AttrValue value)) = Just $ "HP.classes [ " <> classList' <> " ]"
   where
     cs = Text.words value
     classList = Text.intercalate ", " $ mkClassName <$> cs
@@ -173,31 +159,25 @@ printAttr (HTML.Attr "class" value) = Just $ "HP.classes [ " <> classList' <> " 
       if length cs > 5 || Text.length classList > 80
         then Text.intercalate ("\n" <> indent 1 ", ") $ mkClassName <$> Text.words value
         else classList
-printAttr (HTML.Attr "role" value) = Just $ "HPA.role \"" <> value <> "\""
-printAttr (HTML.Attr "id" value) = Just $ "HP.id_ \"" <> value <> "\""
-printAttr (HTML.Attr "autocomplete" "") = Just "HP.autocomplete false"
-printAttr (HTML.Attr "autocomplete" _) = Just "HP.autocomplete true"
-printAttr (HTML.Attr "method" _) = Nothing
-printAttr (HTML.Attr "action" _) = Nothing
-printAttr (HTML.Attr name value) = Just $ "HP." <> name <> " \"" <> value <> "\""
+printAttr _ (Attr (AttrName "role") (AttrValue value)) = Just $ "HPA.role \"" <> value <> "\""
+printAttr _ (Attr (AttrName "id") (AttrValue value)) = Just $ "HP.id_ \"" <> value <> "\""
+printAttr _ (Attr (AttrName "autocomplete") (AttrValue "")) = Just "HP.autocomplete false"
+printAttr _ (Attr (AttrName "autocomplete") _) = Just "HP.autocomplete true"
+printAttr _ (Attr (AttrName "method") _) = Nothing
+printAttr _ (Attr (AttrName "action") _) = Nothing
+printAttr _ (Attr (AttrName name) (AttrValue value)) = Just $ "HP." <> name <> " \"" <> value <> "\""
 
-errorMsg :: Text
-errorMsg =
-  "Something went wrong. Probably an input or img isnt' self closed (eg. <input />)"
+isIgnoredAttr :: Attr -> Bool
+isIgnoredAttr (Attr (AttrName name) _) | "data-" `Text.isPrefixOf` name = True
+isIgnoredAttr (Attr (AttrName name) _) | "aria-" `Text.isPrefixOf` name = True
+isIgnoredAttr _ = False
 
-htmlToHalogen :: Text -> Either Text Text
-htmlToHalogen =
-  bimap (const errorMsg) printDoc
-    . HTML.tokensToForest
-    . HTML.canonicalizeTokens
-    . HTML.parseTokens
-
-htmlToAst :: Text -> Either Text [HtmlAst]
-htmlToAst =
-  bimap (const errorMsg) (mapMaybe (handleEmpty . toHtmlAst))
-    . HTML.tokensToForest
-    . HTML.canonicalizeTokens
-    . HTML.parseTokens
+printAttrList :: HtmlElem -> [Attr] -> Text
+printAttrList elem attrs =
+  openBracket <> Text.intercalate divider (mapMaybe (printAttr elem) attrs') <> closeBracket
+  where
+    attrs' = filter (not . isIgnoredAttr) attrs
+    divider = if length attrs' > 2 then "\n" <> indent 1 ", " else ", "
 
 attr2attr :: HTML.Attr -> Attr
 attr2attr (HTML.Attr name value) = Attr (AttrName name) (AttrValue value)
@@ -261,24 +241,16 @@ handleEmpty (HtmlText Nothing "") = Nothing
 handleEmpty (HtmlText comment "") = Just $ HtmlEmpty comment
 handleEmpty node = Just node
 
-newtype AttrName = AttrName Text
-  deriving (Eq, Ord, Show)
+errorMsg :: Text
+errorMsg =
+  "Something went wrong. Probably an input or img isnt' self closed (eg. <input />)"
 
-newtype AttrValue = AttrValue Text
-  deriving (Eq, Ord, Show)
+printDoc :: Forest HTML.Token -> Text
+printDoc = unlines . mapMaybe printTree . mapMaybe (handleEmpty . toHtmlAst)
 
-data Attr = Attr AttrName AttrValue
-  deriving (Eq, Ord, Show)
-
-newtype HtmlElem = HtmlElem Text
-  deriving (Eq, Ord, Show)
-
-type Comment = Maybe Text
-
--- HERE !!! Implement pretty print of this instead of the Tree Token
-data HtmlAst
-  = HtmlNode HtmlElem Comment [Attr] [HtmlAst]
-  | HtmlLeaf HtmlElem Comment [Attr]
-  | HtmlText Comment Text
-  | HtmlEmpty Comment
-  deriving (Eq, Ord, Show)
+htmlToHalogen :: Text -> Either Text Text
+htmlToHalogen =
+  bimap (const errorMsg) printDoc
+    . HTML.tokensToForest
+    . HTML.canonicalizeTokens
+    . HTML.parseTokens
