@@ -147,18 +147,18 @@ toHtmlAst tree =
   case go tree of
     Nothing -> HtmlText Nothing ""
     Just (Right node) -> node
-    Just (Left comment) -> HtmlText (Just comment) ""
+    Just (Left comment) -> HtmlEmpty $ Just comment
   where
     go :: Tree HTML.Token -> Maybe (Either Text HtmlAst)
     -- Leaf
     go (Node (HTML.TagSelfClose name attrs) _) =
-      Just $ Right $ HtmlLeaf (HtmlElem name) Nothing (fmap attr2attr attrs)
+      Just $ Right $ HtmlLeaf (HtmlElem name) Nothing $ fmap attr2attr attrs
     go (Node (HTML.TagOpen "textarea" attrs) _) =
-      Just $ Right $ HtmlLeaf (HtmlElem "textarea") Nothing (fmap attr2attr attrs)
+      Just $ Right $ HtmlLeaf (HtmlElem "textarea") Nothing $ fmap attr2attr attrs
     go (Node (HTML.TagOpen "input" attrs) _) =
-      Just $ Right $ HtmlLeaf (HtmlElem "input") Nothing (fmap attr2attr attrs)
+      Just $ Right $ HtmlLeaf (HtmlElem "input") Nothing $ fmap attr2attr attrs
     go (Node (HTML.TagOpen "img" attrs) _) =
-      Just $ Right $ HtmlLeaf (HtmlElem "img") Nothing (fmap attr2attr attrs)
+      Just $ Right $ HtmlLeaf (HtmlElem "img") Nothing $ fmap attr2attr attrs
     -- Node
     go (Node (HTML.TagOpen name attrs) rest) =
       mapMaybe go rest
