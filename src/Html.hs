@@ -84,59 +84,18 @@ printTree (HtmlText comment txt) =
       -- TODO: handle multiline text
       Just $ "HH.text \"" <> Text.strip txt <> "\""
     ]
-printTree (HtmlLeaf elem comment []) =
-  mbUnline
-    [ comment >>= printComment,
-      Just $ elemName elem <> emptyBrackets
-    ]
 printTree (HtmlLeaf elem comment attrs) =
   mbUnline
     [ comment >>= printComment,
       Just $ elemName elem,
       Just $ printAttrList elem attrs
     ]
-printTree (HtmlNode elem comment [] []) =
-  mbUnline
-    [ comment >>= printComment,
-      Just $ elemName elem <> emptyBrackets <> emptyBrackets
-    ]
-printTree (HtmlNode elem comment attrs []) =
-  mbUnline
-    [ comment >>= printComment,
-      Just $ elemName elem,
-      Just $ printAttrList elem attrs,
-      Just emptyBrackets
-    ]
-printTree (HtmlNode elem comment [] [child@(HtmlText _ _)]) =
-  mbUnline
-    [ comment >>= printComment,
-      Just $ case printTree child of
-        Just childTxt ->
-          elemName elem <> emptyBrackets <> openBracket <> childTxt <> closeBracket
-        Nothing -> elemName elem <> emptyBrackets <> emptyBrackets
-    ]
-printTree (HtmlNode elem comment [] children) =
-  mbUnline
-    [ comment >>= printComment,
-      Just $ elemName elem,
-      Just emptyBrackets,
-      Just $ openBracket <> printChildren children,
-      Just closeBracket
-    ]
-printTree (HtmlNode elem comment attrs [child@(HtmlText _ _)]) =
-  mbUnline
-    [ comment >>= printComment,
-      Just $ elemName elem,
-      Just $ printAttrList elem attrs,
-      Just $ maybe emptyBrackets (\childTxt -> openBracket <> childTxt <> closeBracket) (printTree child)
-    ]
 printTree (HtmlNode elem comment attrs children) =
   mbUnline
     [ comment >>= printComment,
       Just $ elemName elem,
       Just $ printAttrList elem attrs,
-      Just $ openBracket <> printChildren children,
-      Just closeBracket
+      Just $ openBracket <> printChildren children <> closeBracket
     ]
 
 printChildren :: [HtmlAst] -> Text
