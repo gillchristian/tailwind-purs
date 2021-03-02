@@ -8,8 +8,8 @@ mkDerivation {
   version = "0.0.1.0";
   src = fetchgit {
     url = "https://github.com/gillchristian/tailwind-purs.git";
-    sha256 = "1niwhj9qmfc19bdcbdh4fyjdf74c7bchizggxm6ilv0qd5pn96s2";
-    rev = "519a07981c14f3206c3e20b806501a195de71cd0";
+    sha256 = "0wcy4hsr7apbdmz9pgczhlajp47cawwvswz19y9xp6ggp919pmpc";
+    rev = "f0d5cd96e8a658a8a69bdbf7e098812de9049211";
     fetchSubmodules = true;
   };
   isLibrary = true;
