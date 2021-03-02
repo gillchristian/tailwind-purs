@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Lib where
 
@@ -19,22 +20,22 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import qualified Data.Text.IO as TIO
 import qualified Data.Text.IO as TextIO
 import Data.Tree (Tree (..))
 import qualified Data.Tree as Tree
+import Html
 import qualified Options.Applicative as Opt
 import qualified PureScript as PS
 import qualified System.Directory as Dir
+import System.Exit (die)
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
+import System.IO (stderr)
 import Text.Parsec.Text (parseFromFile)
 import Text.Render
 import Twitch ((|-), (|>))
 import qualified Twitch
-import qualified Data.Text.IO as TIO
-import Html
-import System.IO (stderr)
-import System.Exit (die)
 
 newtype FileName = FileName FilePath
   deriving (Show, Eq, Ord)
@@ -130,17 +131,17 @@ extractClasses path = do
 extractUsedClasses :: [FilePath] -> IO (Either String [String])
 extractUsedClasses files = fmap join . sequence <$> traverse extractClasses files
 
-readAvailableClasses :: FilePath -> IO (Either String [CssClass])
+readAvailableClasses :: FilePath -> IO (Either String [ClassName])
 readAvailableClasses path = BiF.first show <$> parseFromFile availableClasses path
 
 parseInputCss :: FilePath -> IO (Either String CSS.AST)
 parseInputCss path = BiF.first show <$> parseFromFile CSS.cssFile path
 
-filterUsedClasses :: [String] -> [CssClass] -> [CssClass]
+filterUsedClasses :: [String] -> [ClassName] -> [ClassName]
 filterUsedClasses usedClasses =
-  filter $ \(CssClass name _) -> name `elem` usedClasses
+  filter $ \(ClassName name _) -> name `elem` usedClasses
 
-generateOnce :: PursClassesOptions -> Either String [CssClass] -> IO ()
+generateOnce :: PursClassesOptions -> Either String [ClassName] -> IO ()
 generateOnce config classes = do
   cs <-
     if pursAll config
@@ -150,7 +151,7 @@ generateOnce config classes = do
         pure $ filterUsedClasses <$> usedClasses <*> classes
   generate config cs
 
-generate :: PursClassesOptions -> Either String [CssClass] -> IO ()
+generate :: PursClassesOptions -> Either String [ClassName] -> IO ()
 generate config cs =
   case liftA2 (,) <$> fmap length <*> fmap PS.tailwindModule $ cs of
     Left err -> putStrLn err
@@ -159,7 +160,7 @@ generate config cs =
       unless (pursAll config) $ putStrLn $ "Found " <> show count <> " used classes"
       putStrLn $ List.replace (pursRoot config <> "/") "" (pursOut config) <> " updated succesfully!"
 
-generateWatchMode :: PursClassesOptions -> Either String [CssClass] -> IO ()
+generateWatchMode :: PursClassesOptions -> Either String [ClassName] -> IO ()
 generateWatchMode config classes = do
   generateOnce (config {pursAll = False}) classes
   files <- listFiles (pursSrc config)
@@ -203,7 +204,7 @@ generateWatchMode config classes = do
               putStrLn ""
   where
     extract :: FilePath -> IO (Either String (FilePath, [String]))
-    extract path = fmap ((,) path) <$> extractClasses path
+    extract path = fmap (path,) <$> extractClasses path
 
 generatePursClasses :: PursClassesOptions -> IO ()
 generatePursClasses config = do
@@ -212,11 +213,12 @@ generatePursClasses config = do
     then generateWatchMode config classes
     else generateOnce config classes
 
-filterUnusedCss :: [CssClass] -> CSS.AST -> CSS.AST
+filterUnusedCss :: [ClassName] -> CSS.AST -> CSS.AST
 filterUnusedCss used (CSS.AST nodes) = CSS.AST $ Maybe.mapMaybe mapFilterNode nodes
   where
-    selectorMatchesClass :: CSS.Selector -> CssClass -> Bool
-    selectorMatchesClass (CSS.ClassSelector a' _) (CssClass _ a) = filter (/= '\\') a' == a
+    selectorMatchesClass :: CSS.Selector -> ClassName -> Bool
+    selectorMatchesClass (CSS.ClassSelector cx) (ClassName _ a) =
+      elem a $ filter (/= '\\') . CSS.className <$> NE.toList cx
     selectorMatchesClass _ _ = False
 
     isGenericSelector :: CSS.Selector -> Bool
@@ -251,28 +253,29 @@ generateOptimizedCSS config = do
       putStrLn $ "Optimized CSS written to " <> cleanOut config
     Left err -> putStrLn err
 
+className :: CSS.Selector -> Maybe [String]
 className (CSS.GenericSelector _) = Nothing
-className (CSS.ClassSelector class' _) = Just class'
+className (CSS.ClassSelector cx) = Just $ CSS.className <$> NE.toList cx
 
 nodeClasses :: CSS.CssNode -> [String]
-nodeClasses (CSS.RuleGroup selectors _) = Maybe.mapMaybe className $ NE.toList selectors
+nodeClasses (CSS.RuleGroup selectors _) = join $ Maybe.mapMaybe className $ NE.toList selectors
 nodeClasses (CSS.MediaQuery _ nodes) = nodeClasses =<< nodes
 nodeClasses _ = []
 
 escapeCssName :: String -> String
 escapeCssName = filter (/= '\\')
 
-pursifyCssClass :: String -> CssClass
-pursifyCssClass = CssClass <$> PS.cssToPursName <*> escapeCssName
+pursifyClassName :: String -> ClassName
+pursifyClassName = ClassName <$> PS.cssToPursName <*> escapeCssName
 
-pursAndCss :: CssClass -> String
+pursAndCss :: ClassName -> String
 pursAndCss cx = classPursName cx <> ";" <> classCssName cx
 
 cssToAvailableClasses :: CSS.AST -> String
 cssToAvailableClasses =
   intercalate "\n"
     . sort
-    . fmap (pursAndCss . pursifyCssClass)
+    . fmap (pursAndCss . pursifyClassName)
     . Set.toList
     . Set.fromList
     . (nodeClasses <=< CSS.unAst)

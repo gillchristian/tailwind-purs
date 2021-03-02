@@ -3,24 +3,33 @@
 module CSS where
 
 import Control.Monad (join, void)
+import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import Text.Parsec.Text (Parser)
-import qualified Text.Parsec as P
-import Data.List (intercalate)
 import Text.Parsec ((<|>))
+import qualified Text.Parsec as P
+import Text.Parsec.Text (Parser)
 import Text.Render
 import Util
 
+data CssClass = CssClass String (Maybe String)
+  deriving (Eq, Show)
+
+className :: CssClass -> String
+className (CssClass name _) = name
+
+instance Render CssClass where
+  render (CssClass cx (Just mod)) = "." <> cx <> mod
+  render (CssClass cx Nothing) = "." <> cx
+
 data Selector
   = GenericSelector String
-  | ClassSelector String (Maybe String)
+  | ClassSelector (NonEmpty CssClass)
   deriving (Eq, Show)
 
 instance Render Selector where
   render (GenericSelector selector) = selector
-  render (ClassSelector cx (Just mod)) = "." <> cx <> mod
-  render (ClassSelector cx Nothing) = "." <> cx
+  render (ClassSelector cxs) = intercalate "" $ map render $ NE.toList cxs
 
 data CssNode
   = RuleGroup (NonEmpty Selector) String
@@ -30,7 +39,7 @@ data CssNode
   deriving (Eq, Show)
 
 instance Render CssNode where
-  render (RuleGroup selectors body) = selectors' <> " {" <> body <> "}"
+  render (RuleGroup selectors body) = selectors' <> "{" <> body <> "}"
     where
       selectors' = intercalate ",\n" $ NE.toList $ fmap render selectors
   render (MediaQuery query nodes) = "@media " <> query <> " {\n" <> nodes' <> "\n}"
@@ -50,20 +59,23 @@ instance Render AST where
 genericSelector :: Parser Selector
 genericSelector = GenericSelector . trimEnd <$> P.many1 (P.noneOf ",{}") <* P.spaces
 
-classSelector :: Parser Selector
-classSelector = do
+cssClass :: Parser CssClass
+cssClass = do
   void $ P.char '.'
   className <- join <$> P.many (P.try escape <|> fmap pure nonEscape)
-  mod <- trimEnd <$> P.many (P.noneOf ",{")
-  pure $ ClassSelector className $ NE.toList <$> NE.nonEmpty mod
+  mod <- P.many (P.noneOf ",{.")
+  pure $ CssClass className $ NE.toList <$> NE.nonEmpty mod
   where
     nonEscape :: Parser Char
-    nonEscape = P.noneOf ",:{ "
+    nonEscape = P.noneOf ",:{. "
     escape :: Parser String
     escape = do
       d <- P.char '\\'
       c <- P.noneOf " \n\t"
       pure [d, c]
+
+classSelector :: Parser Selector
+classSelector = ClassSelector . NE.fromList <$> P.many1 cssClass
 
 selector :: Parser Selector
 selector = P.try classSelector <|> genericSelector
