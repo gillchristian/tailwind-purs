@@ -302,7 +302,7 @@ html2Purs = do
     Right doc -> do
       TIO.putStrLn doc
       TIO.hPutStrLn stderr "Parsed HTML and printed as Halogen HTML succesfully"
-    Left _ -> die ""
+    Left err -> die (Text.unpack err)
 
 run :: IO ()
 run = do
