@@ -27,6 +27,7 @@ dependencies:
 - text
 - transformers
 - twitch
+- with-utf8
 
 library:
   source-dirs: src

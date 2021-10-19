@@ -1,10 +1,8 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 92bb277a089106769daf629051c0d82849197325485a1d793cb9b2d56ffb618a
 
 name:           tailwind-purs
 version:        0.0.2.0
@@ -54,6 +52,7 @@ library
     , text
     , transformers
     , twitch
+    , with-utf8
   default-language: Haskell2010
 
 executable twpurs
@@ -80,6 +79,7 @@ executable twpurs
     , text
     , transformers
     , twitch
+    , with-utf8
   default-language: Haskell2010
 
 test-suite tailwind-purs-test
@@ -108,4 +108,5 @@ test-suite tailwind-purs-test
     , text
     , transformers
     , twitch
+    , with-utf8
   default-language: Haskell2010
