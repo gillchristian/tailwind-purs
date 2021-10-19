@@ -4,10 +4,11 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e44581fffc2a4ad5ee19dbcdc508331473bbb0f17a93bdd1a6d16d5b74effe59
+-- hash: 92bb277a089106769daf629051c0d82849197325485a1d793cb9b2d56ffb618a
+
 
 name:           tailwind-purs
-version:        0.0.1.0
+version:        0.0.2.0
 description:    Please see the README on GitHub at <https://github.com/gillchristian/tailwind-purs#readme>
 homepage:       https://github.com/gillchristian/tailwind-purs#readme
 bug-reports:    https://github.com/gillchristian/tailwind-purs/issues

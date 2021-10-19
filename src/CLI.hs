@@ -168,7 +168,12 @@ classNamesOpts = ClassNamesCmd <$> Opt.info opts (Opt.progDesc desc)
 html2pursOpts :: Opt.ParserInfo Command
 html2pursOpts = HtmlToHalogen <$ Opt.info (pure ()) (Opt.progDesc desc)
   where
-    desc = "Pars HTML (from STDIN) into Halogen HTML"
+    desc = "Parse HTML (from STDIN) into Halogen HTML"
+
+versionOpts :: Opt.ParserInfo Command
+versionOpts = Version <$ Opt.info (pure ()) (Opt.progDesc desc)
+  where
+    desc = "Show the version"
 
 data Command
   = PursClasses PursClassesOptions
@@ -176,6 +181,7 @@ data Command
   | GenAvaiableClasses GenAvaiableClassesOptions
   | ClassNamesCmd ClassNamesOptions
   | HtmlToHalogen
+  | Version
   deriving (Eq, Show)
 
 newtype Options = Options {uncommand :: Command}
@@ -187,7 +193,8 @@ opts =
     (programm <**> Opt.helper)
     (Opt.fullDesc <> Opt.header "Do some Tailwind stuff")
   where
-    programm = Options <$> Opt.hsubparser (gen <> purs <> css <> classnames <> html)
+    programm = Options <$> Opt.hsubparser (version <> gen <> purs <> css <> classnames <> html)
+    version = Opt.command "version" versionOpts
     gen = Opt.command "gen-available-classes" genOpts
     purs = Opt.command "gen-purs" pursOpts
     css = Opt.command "gen-css" cssOpts
