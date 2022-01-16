@@ -1,6 +1,11 @@
 # tailwind-purs
 
-A CLI to optimize the generation of type safe Tailwind classes in PureScript
+A CLI to optimize the generation of type safe Tailwind classes in PureScript. Works with some caveats (see below). This will probably be rewriten in purescript instead of haskell at some point.
+
+Known problems:
+* html2purs: the html parser does not support svg
+* html2purs: all single tags element got to have a closing slash. I.E. `<input />` instead of `<input>`
+* html2purs: assumes all classes are tailwind classes and generates purescript accordingly.
 
 ### Install
 
@@ -90,7 +95,8 @@ Available options:
 
 Parse HTML and produce the Halogen HTML version, takes care of formatting the
 classes as Tailwind ones. It does not pretty format the generated PureScript
-code. You can use [purty](https://gitlab.com/joneshf/purty) for that.
+code. You can use [purescript-tidy](https://github.com/natefaubion/purescript-tidy) for that.
+Alternatively there is [purty](https://gitlab.com/joneshf/purty) which can be a bit buggy.
 
 ```
 $ twpurs html2purs --help
