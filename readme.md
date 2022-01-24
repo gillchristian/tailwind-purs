@@ -4,7 +4,7 @@ A CLI to optimize the generation of type safe Tailwind classes in PureScript. Wo
 
 Known problems:
 * html2purs: the html parser does not support svg
-* html2purs: all single tags element got to have a closing slash. I.E. `<input />` instead of `<input>`
+* html2purs: all single tags element got to have a closing slash. I.E. `<input />` instead of `<input>` https://github.com/bgamari/html-parse/issues/15
 * html2purs: assumes all classes are tailwind classes and generates purescript accordingly.
 
 ### Install
