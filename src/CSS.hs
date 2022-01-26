@@ -102,7 +102,7 @@ mediaQuery = do
 query :: Parser CssNode
 query = do
   q <- P.char '@' *> P.many (P.noneOf " ") <* P.spaces
-  name <- P.many P.alphaNum <* P.spaces
+    name <- (:) <$> P.alphaNum <*> P.many (P.alphaNum <|> P.char '-') <* P.spaces
   ruleGroups <- brackets $ P.spaces *> P.many ruleGroup
   P.spaces
   pure $ Query q name ruleGroups
