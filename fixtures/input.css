@@ -1,0 +1,51 @@
+.foo {
+  display: block;
+}
+
+html {
+  display: block;
+}
+
+.group:hover .group-hover-red-text {
+  background-color: transparent;
+}
+
+.group:hover.group-hover-red-text {
+  background-color: transparent;
+}
+
+@media (min-width: 1536px) {
+  @media (min-width: 640px) {
+    .\32xl\:container {
+      display: flex;
+    }
+  }
+
+  .\32xl\:space-y-0 > :not([hidden]) ~ :not([hidden]) {
+    display: flex;
+  }
+
+  .\32xl\:divide-black > :not([hidden]) ~ :not([hidden]) {
+    display: flex;
+  }
+
+  .\32xl\:bg-gray-800 {
+    display: flex;
+  }
+
+  .\32xl\:focus-within\:bg-purple-600:focus-within {
+    display: flex;
+  }
+
+  .\32xl\:rounded-t-none {
+    display: flex;
+  }
+
+  .\32xl\:skew-x-1 {
+    display: flex;
+  }
+}
+
+.foo\:hover {}
+
+.foo:hover {}

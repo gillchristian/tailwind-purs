@@ -1,0 +1,13 @@
+@-webkit-keyframes button-pop {
+  0% {
+    transform: scale( var(--btn-focus-scale, .95) );
+  }
+
+  40% {
+    transform: scale(1.02);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}

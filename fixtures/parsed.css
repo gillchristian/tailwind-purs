@@ -1,0 +1,31 @@
+@media (min-width: 1536px) {
+  @media (min-width: 640px) {
+  .\32xl\-->:container<--/* with mod */ {
+      display: flex;
+    }
+}
+
+  .\32xl\-->:space-y-0 > :not([hidden]) ~ :not([hidden])<--/* with mod */ {
+    display: flex;
+  }
+
+  .\32xl\-->:divide-black > :not([hidden]) ~ :not([hidden])<--/* with mod */ {
+    display: flex;
+  }
+
+  .\32xl\-->:bg-gray-800<--/* with mod */ {
+    display: flex;
+  }
+
+  .\32xl\-->:focus-within\:bg-purple-600:focus-within<--/* with mod */ {
+    display: flex;
+  }
+
+  .\32xl\-->:rounded-t-none<--/* with mod */ {
+    display: flex;
+  }
+
+  .\32xl\-->:skew-x-1<--/* with mod */ {
+    display: flex;
+  }
+}

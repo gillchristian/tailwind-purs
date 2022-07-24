@@ -1,0 +1,7 @@
+_32xlBgGray800;32xl:bg-gray-800
+_32xlContainer;32xl:container
+_32xlDivideBlack;32xl:divide-black
+_32xlFocusWithinBgPurple600;32xl:focus-within:bg-purple-600
+_32xlRoundedTNone;32xl:rounded-t-none
+_32xlSkewX1;32xl:skew-x-1
+_32xlSpaceY0;32xl:space-y-0

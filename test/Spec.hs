@@ -167,7 +167,7 @@ main = hspec $ do
                 "/* another",
                 "   comment */",
                 "",
-                "@keyframes spin {",
+                "@keyframes spin-long {",
                 "  to {",
                 "    transform: rotate(360deg);",
                 "  }",
@@ -206,7 +206,7 @@ main = hspec $ do
                 CSS.Comment " another\n   comment ",
                 CSS.Query
                   "keyframes"
-                  "spin"
+                  "spin-long"
                   [CSS.RuleGroup (CSS.GenericSelector "to" :| []) "\n    transform: rotate(360deg);\n  "],
                 CSS.MediaQuery
                   "(min-width: 640px)"

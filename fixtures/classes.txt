@@ -1,0 +1,11 @@
+absolute          => absolute
+border-yellow-600 => borderYellow600
+
+focus:-rotate-12  => focusNegRotate12
+bottom-1/2        => bottom1d2
+bottom-0.5        => bottom0p5
+32xl              => _32xl ?
+
+_32xl;32xl
+focusNegRotate12;focus:-rotate-12
+bottom0p5;bottom-0.5
